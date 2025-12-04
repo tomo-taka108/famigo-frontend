@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Famigo - Family Spot Finder</title>
+
+  <!-- Tailwind（CDN）はそのまま利用してOK -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#F97316',   // Orange-500
+            secondary: '#14B8A6', // Teal-500
+            accent: '#FBBF24',    // Amber-400
+          },
+          fontFamily: {
+            sans: ['"Helvetica Neue"', 'Arial', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+
+  <!-- ★ ここが重要：React の importmap は削除（Vite が node_modules から読むので不要） -->
+</head>
+
+<body class="bg-gray-50 text-gray-800 antialiased">
+<!-- React が描画する土台 -->
+<div id="root"></div>
+
+<!-- ★ これがないと main.tsx が実行されない -->
+<script type="module" src="/src/main.tsx"></script>
+</body>
+</html>
