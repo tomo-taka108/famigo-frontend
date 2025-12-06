@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
-import { MOCK_SPOTS } from './constants';
+import React, { useState, useEffect } from 'react';
+import type { Spot } from './types';
+import { fetchSpots } from './api/spots';
+
 import { SpotCard } from './components/SpotCard';
 import { FilterModal } from './components/FilterModal';
 import { Footer } from './components/Footer';
@@ -8,11 +10,40 @@ import { SearchIcon, FilterIcon, MapIcon } from './components/Icons';
 export default function App() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [keyword, setKeyword] = useState('');
+  const [spots, setSpots] = useState<Spot[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Simple client-side search simulation
-  const filteredSpots = MOCK_SPOTS.filter(spot => 
-    spot.name.includes(keyword) || spot.address.includes(keyword)
-  );
+  // 初回ロード時に /spots を fetch
+    useEffect(() => {
+      const load = async () => {
+        try {
+          const data = await fetchSpots();   // バックエンドからSpot[]
+          setSpots(data);
+        } catch (e: any) {
+          console.error(e);
+          setError(e.message ?? 'データ取得中にエラーが発生しました');
+        } finally {
+          setLoading(false);
+        }
+      };
+      load();
+    }, []);
+
+  // クライアント側の検索フィルタ
+  const filteredSpots = spots.filter(spot =>
+      spot.name.includes(keyword) || spot.address.includes(keyword)
+    );
+
+  // ローディング表示
+    if (loading) {
+      return <div className="p-6 text-center text-gray-600">読み込み中...</div>;
+    }
+
+    // エラー表示
+    if (error) {
+      return <div className="p-6 text-center text-red-600">エラー: {error}</div>;
+    }
 
   return (
     <div className="min-h-screen pb-24 font-sans">
