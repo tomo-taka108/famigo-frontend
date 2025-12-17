@@ -1,8 +1,7 @@
-// src/pages/SpotListPage.tsx
-
-import React, { useState, useEffect, useMemo } from "react";
-import type { FilterState, Spot } from "../types";
+import React, { useState, useEffect } from "react";
+import type { Category, FilterState, Spot } from "../types";
 import { fetchSpots } from "../api/spots";
+import { fetchCategories } from "../api/categories";
 
 import { SpotCard } from "../components/SpotCard";
 import { FilterModal } from "../components/FilterModal";
@@ -23,9 +22,6 @@ export default function SpotListPage() {
     facilities: [],
   });
 
-  // keyword は上部入力欄から直接編集しやすいように、同じ state を使う
-  const keyword = filter.keyword;
-
   // ---------------------------------------------
   // 一覧データ
   // ---------------------------------------------
@@ -34,35 +30,45 @@ export default function SpotListPage() {
   const [error, setError] = useState<string | null>(null);
 
   // ---------------------------------------------
-  // カテゴリ選択肢（暫定）
-  // 次ステップで「カテゴリAPI（GET /categories）」を作ったら、
-  // ここを fetchCategories() で取得した内容に置き換える
+  // カテゴリ一覧（APIから取得）
+  // GET /categories の結果
   // ---------------------------------------------
-  const categoryOptions = useMemo(
-    () => [
-      { id: 1, name: "公園" },
-      { id: 2, name: "動物園" },
-      { id: 3, name: "水族館" },
-    ],
-    []
-  );
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
 
   // ---------------------------------------------
-  // 初期表示：条件なしで全件
+  // 初期表示：スポット全件 + カテゴリ一覧を取得
   // ---------------------------------------------
   useEffect(() => {
     const load = async () => {
       try {
         setLoading(true);
         setError(null);
-        const data = await fetchSpots();
-        setSpots(data);
-      } catch (e: any) {
-        setError(e?.message ?? "データ取得中にエラーが発生しました");
+
+        // 並列取得（片方失敗しても片方は使えるように分けて扱う）
+        const [spotsResult, categoriesResult] = await Promise.allSettled([
+          fetchSpots(),
+          fetchCategories(),
+        ]);
+
+        if (spotsResult.status === "fulfilled") {
+          setSpots(spotsResult.value);
+        } else {
+          setError(spotsResult.reason?.message ?? "スポット取得中にエラーが発生しました");
+        }
+
+        if (categoriesResult.status === "fulfilled") {
+          setCategories(categoriesResult.value);
+        } else {
+          // カテゴリだけ失敗しても、検索UIのカテゴリ欄が空になるだけでアプリは動く
+          setCategoryError(categoriesResult.reason?.message ?? "カテゴリ取得に失敗しました");
+          setCategories([]);
+        }
       } finally {
         setLoading(false);
       }
     };
+
     load();
   }, []);
 
@@ -132,7 +138,7 @@ export default function SpotListPage() {
                 type="text"
                 className="block w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl leading-5 bg-gray-50 text-gray-900 placeholder-gray-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all sm:text-sm"
                 placeholder="エリア・住所・スポット名で検索"
-                value={keyword}
+                value={filter.keyword}
                 onChange={(e) =>
                   setFilter((prev) => ({
                     ...prev,
@@ -151,7 +157,6 @@ export default function SpotListPage() {
                 絞り込み
               </button>
 
-              {/* 検索（keywordだけでもOK） */}
               <button
                 onClick={runSearch}
                 className="flex-1 md:flex-none px-4 py-3 rounded-xl font-semibold text-white bg-orange-500 hover:bg-orange-600"
@@ -159,7 +164,6 @@ export default function SpotListPage() {
                 検索
               </button>
 
-              {/* 将来：地図表示などに使う想定。現状はUIのみ */}
               <button
                 className="hidden md:flex items-center justify-center gap-2 px-4 py-3 border border-gray-200 rounded-xl bg-white hover:bg-gray-50 active:bg-gray-100 transition-colors"
                 disabled
@@ -170,6 +174,13 @@ export default function SpotListPage() {
               </button>
             </div>
           </div>
+
+          {/* カテゴリ取得失敗時の注意表示（任意） */}
+          {categoryError && (
+            <div className="mt-2 text-xs text-amber-600">
+              ※カテゴリ一覧の取得に失敗しました（絞り込みのカテゴリが表示されません）
+            </div>
+          )}
         </div>
       </header>
 
@@ -188,11 +199,11 @@ export default function SpotListPage() {
         )}
       </main>
 
-      {/* Modals & Overlays */}
       <FilterModal
         isOpen={isFilterOpen}
         onClose={() => setIsFilterOpen(false)}
-        categoryOptions={categoryOptions}
+        // ★ここが仮配列ではなくAPI取得に変わる
+        categoryOptions={categories}
         selectedCategoryIds={filter.categoryIds}
         setSelectedCategoryIds={(v) =>
           setFilter((prev) => ({
