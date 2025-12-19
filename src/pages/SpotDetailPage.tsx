@@ -6,6 +6,7 @@ import type { SpotDetail, ReviewListItem } from "../types";
 
 export default function SpotDetailPage() {
   const { id } = useParams();
+  
   const [spot, setSpot] = useState<SpotDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +60,29 @@ export default function SpotDetailPage() {
     if (Number.isNaN(d.getTime())) return isoString;
     return d.toLocaleString();
   };  
+
+  // ★表示を星アイコンにする（1〜5）
+  const renderStars = (rating: number) => {
+    const max = 5;
+    const full = Math.max(0, Math.min(max, rating));
+
+    return (
+      <div className="flex items-center gap-1" aria-label={`評価 ${full} / 5`}>
+        {Array.from({ length: max }).map((_, i) => (
+          <svg
+            key={i}
+            viewBox="0 0 20 20"
+            className="h-4 w-4"
+            fill={i < full ? "currentColor" : "none"}
+            stroke="currentColor"
+            strokeWidth="1"
+          >
+            <path d="M10 1.5l2.6 5.7 6.2.5-4.7 4 1.4 6-5.5-3.2-5.5 3.2 1.4-6-4.7-4 6.2-.5L10 1.5z" />
+          </svg>
+        ))}
+      </div>
+    );
+  };
 
   if (loading) {
     return (
@@ -238,11 +262,14 @@ export default function SpotDetailPage() {
                     <div className="font-semibold text-gray-900">
                       {r.userName}
                     </div>
-                    <div className="text-sm text-gray-700">
-                      ★{r.rating}
+                    <div className="flex items-center gap-2 text-sm text-gray-700">
+                      <span className="text-yellow-500">
+                        {renderStars(r.rating)}
+                      </span>
+                      <span>{r.rating}/5</span>
                     </div>
                   </div>
-
+                  
                   <div className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">
                     {r.reviewText}
                   </div>
