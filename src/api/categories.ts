@@ -1,8 +1,7 @@
 import type { Category } from "../types";
 
 // ---------------------------------------------
-// 共通の API ベースURL
-// ※ spots.ts と揃える
+// 共通の API ベースURL（spots.ts と合わせる）
 // ---------------------------------------------
 const BASE_URL = "http://localhost:8080";
 
