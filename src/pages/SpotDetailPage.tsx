@@ -1,9 +1,8 @@
-// src/pages/SpotDetailPage.tsx
-
 import { useParams, Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { fetchSpotDetail } from "../api/spots";
-import type { SpotDetail } from "../types";
+import { fetchReviewsBySpotId } from "../api/reviews";
+import type { SpotDetail, ReviewListItem } from "../types";
 
 export default function SpotDetailPage() {
   const { id } = useParams();
@@ -11,8 +10,14 @@ export default function SpotDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [reviews, setReviews] = useState<ReviewListItem[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
+  const [reviewsError, setReviewsError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!id) return;
+    
+    const spotId = Number(id);
 
     const load = async () => {
       try {
@@ -28,6 +33,32 @@ export default function SpotDetailPage() {
 
     load();
   }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+
+    const spotId = Number(id);
+
+    const loadReviews = async () => {
+      try {
+        const data = await fetchReviewsBySpotId(spotId);
+        setReviews(data);
+      } catch (e: any) {
+        console.error(e);
+        setReviewsError(e.message ?? "レビュー一覧の取得に失敗しました。");
+      } finally {
+        setReviewsLoading(false);
+      }
+    };
+
+    loadReviews();
+  }, [id]);
+
+  const formatDateTime = (isoString: string) => {
+    const d = new Date(isoString);
+    if (Number.isNaN(d.getTime())) return isoString;
+    return d.toLocaleString();
+  };  
 
   if (loading) {
     return (
@@ -145,7 +176,7 @@ export default function SpotDetailPage() {
             </li>
             <li>ベビーカー：{spot.strollerOk ? "OK" : "NG"}</li>
             <li>遊具：{spot.playground ? "あり" : "なし"}</li>
-            <li>アスレチック：{spot.athletics ? "あり" : "なし"}</li>
+            <li>アスレチックコース：{spot.athletics ? "あり" : "なし"}</li>
             <li>水遊び：{spot.waterPlay ? "あり" : "なし"}</li>
             <li>屋内施設：{spot.indoor ? "あり" : "なし"}</li>
           </ul>
@@ -180,6 +211,51 @@ export default function SpotDetailPage() {
             )}
           </div>
         </section>
+
+        {/* レビュー一覧 */}
+        <section className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mt-6">
+          <h2 className="text-lg font-bold text-gray-900 mb-4">
+            レビュー
+          </h2>
+
+          {reviewsLoading && (
+            <div className="text-sm text-gray-600">読み込み中...</div>
+          )}
+
+          {reviewsError && (
+            <div className="text-sm text-red-600">エラー: {reviewsError}</div>
+          )}
+
+          {!reviewsLoading && !reviewsError && reviews.length === 0 && (
+            <div className="text-sm text-gray-600">レビューはまだありません。</div>
+          )}
+
+          {!reviewsLoading && !reviewsError && reviews.length > 0 && (
+            <ul className="space-y-4">
+              {reviews.map((r) => (
+                <li key={r.id} className="border border-gray-100 rounded-lg p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="font-semibold text-gray-900">
+                      {r.userName}
+                    </div>
+                    <div className="text-sm text-gray-700">
+                      ★{r.rating}
+                    </div>
+                  </div>
+
+                  <div className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">
+                    {r.reviewText}
+                  </div>
+
+                  <div className="text-xs text-gray-500 mt-2">
+                    {formatDateTime(r.createdAt)}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
       </main>
     </div>
   );
