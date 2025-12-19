@@ -240,6 +240,7 @@ export default function SpotDetailPage() {
         <section className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mt-6">
           <h2 className="text-lg font-bold text-gray-900 mb-4">
             レビュー
+            {!reviewsLoading && !reviewsError && `（${reviews.length}件）`}
           </h2>
 
           {reviewsLoading && (
@@ -269,7 +270,7 @@ export default function SpotDetailPage() {
                       <span>{r.rating}/5</span>
                     </div>
                   </div>
-                  
+
                   <div className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">
                     {r.reviewText}
                   </div>
