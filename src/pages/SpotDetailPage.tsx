@@ -15,6 +15,9 @@ export default function SpotDetailPage() {
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const [reviewsError, setReviewsError] = useState<string | null>(null);
 
+  const [showAllReviews, setShowAllReviews] = useState(false); // 初期は一部だけ表示する
+  const INITIAL_REVIEW_COUNT = 3; // 初期表示件数（必要なら5などに変更）
+
   useEffect(() => {
     if (!id) return;
     
@@ -83,6 +86,12 @@ export default function SpotDetailPage() {
       </div>
     );
   };
+
+  const hasMoreReviews = reviews.length > INITIAL_REVIEW_COUNT;
+  const visibleReviews = showAllReviews
+    ? reviews
+    : reviews.slice(0, INITIAL_REVIEW_COUNT); // 表示対象（初期は先頭3件だけ）
+
 
   if (loading) {
     return (
@@ -252,36 +261,54 @@ export default function SpotDetailPage() {
           )}
 
           {!reviewsLoading && !reviewsError && reviews.length === 0 && (
-            <div className="text-sm text-gray-600">レビューはまだありません。</div>
-          )}
+  <div className="text-sm text-gray-600">レビューはまだありません。</div>
+)}
 
-          {!reviewsLoading && !reviewsError && reviews.length > 0 && (
-            <ul className="space-y-4">
-              {reviews.map((r) => (
-                <li key={r.id} className="border border-gray-100 rounded-lg p-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="font-semibold text-gray-900">
-                      {r.userName}
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-gray-700">
-                      <span className="text-yellow-500">
-                        {renderStars(r.rating)}
-                      </span>
-                      <span>{r.rating}/5</span>
-                    </div>
-                  </div>
+{!reviewsLoading && !reviewsError && reviews.length > 0 && (
+  <> {/* ★追加：ul と「もっと見る」をまとめる */}
 
-                  <div className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">
-                    {r.reviewText}
-                  </div>
+    <ul className="space-y-4">
+      {visibleReviews.map((r) => (
+        <li key={r.id} className="border border-gray-100 rounded-lg p-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="font-semibold text-gray-900">
+              {r.userName}
+            </div>
+            <div className="flex items-center gap-2 text-sm text-gray-700">
+              <span className="text-yellow-500">
+                {renderStars(r.rating)}
+              </span>
+              <span>{r.rating}/5</span>
+            </div>
+          </div>
 
-                  <div className="text-xs text-gray-500 mt-2">
-                    {formatDateTime(r.createdAt)}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+          <div className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">
+            {r.reviewText}
+          </div>
+
+          <div className="text-xs text-gray-500 mt-2">
+            {formatDateTime(r.createdAt)}
+          </div>
+        </li>
+      ))}
+    </ul>
+
+    {hasMoreReviews && !showAllReviews && (
+      <div className="mt-4">
+        <button
+          type="button"
+          className="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 hover:bg-gray-50"
+          onClick={() => setShowAllReviews(true)}
+        >
+          もっと見る
+        </button>
+      </div>
+    )}
+
+  </>
+)}
+
+
         </section>
 
       </main>
