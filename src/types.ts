@@ -85,3 +85,17 @@ export interface SpotDetail {
   waterPlay: boolean;
   indoor: boolean;
 }
+
+
+// ReviewListItem（フロントが扱うレビュー一覧の1件）
+// バックエンドの ReviewListItemDto と完全一致
+
+export interface ReviewListItem {
+  id: number;
+  spotId: number;
+  userId: number;
+  userName: string;
+  rating: number;
+  reviewText: string;
+  createdAt: string; // バックエンドの LocalDateTime を ISO 文字列で受け取る想定
+}
