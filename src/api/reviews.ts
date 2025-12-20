@@ -39,6 +39,7 @@ export const createReview = async (
   });
 
   if (!res.ok) {
-    throw new Error(`Failed to create review: ${res.status}`);
-  }
+  const text = await res.text().catch(() => "");
+  throw new Error(text || `Failed to create review: ${res.status}`);
+}
 };

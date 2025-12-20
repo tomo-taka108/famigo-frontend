@@ -47,7 +47,7 @@ export type ChildAgeGroup =
 
 // レビュー投稿（Create）リクエスト型（バックエンドの ReviewCreateRequest 相当）
 export interface ReviewCreateRequest {
-  childAgeGroup?: ChildAgeGroup; // 必須
+  childAgeGroup: ChildAgeGroup; // 必須
   rating: number; // 必須（1〜5）
   ratingCost?: number | null; // 任意（1〜5）
   crowdLevel?: number | null; // 任意（1〜5）
