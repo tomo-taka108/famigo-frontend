@@ -1,6 +1,5 @@
 // Spot（フロントが扱うスポット情報）
 // バックエンドの SpotListItemDto と完全一致
-
 export interface Spot {
   id: number;
   name: string;
@@ -19,6 +18,7 @@ export interface Spot {
   indoor: boolean;
 }
 
+
 // フィルター用
 // SpotController の @RequestParam と対応（Enumは「Enum名」で送る）
 export type PriceType = "FREE" | "UNDER_1000" | "UNDER_2000" | "OVER_2000";
@@ -35,6 +35,27 @@ export type FacilityKey =
   | "athletics"
   | "water"
   | "indoor";
+
+
+// レビュー投稿用（バックエンドの ChildAgeGroup enum 名に合わせる）
+export type ChildAgeGroup =
+  | "PRESCHOOL"
+  | "ELE_LOW"
+  | "ELE_HIGH"
+  | "JUNIOR_HIGH_PLUS";
+
+
+// レビュー投稿（Create）リクエスト型（バックエンドの ReviewCreateRequest 相当）
+export interface ReviewCreateRequest {
+  childAgeGroup?: ChildAgeGroup; // 必須
+  rating: number; // 必須（1〜5）
+  ratingCost?: number | null; // 任意（1〜5）
+  crowdLevel?: number | null; // 任意（1〜5）
+  toiletCleanliness?: number | null; // 任意（1〜5）
+  strollerEase?: number | null; // 任意（1〜5）
+  reviewText: string; // 必須
+  costTotal?: number | null; // 任意
+}
 
 
 // カテゴリ（フロントが扱うカテゴリ情報）
