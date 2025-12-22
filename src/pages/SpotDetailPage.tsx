@@ -1,13 +1,19 @@
-import { useParams, Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { fetchSpotDetail } from "../api/spots";
 import { createReview, fetchReviewsBySpotId } from "../api/reviews";
 import type {
-  SpotDetail,
-  ReviewListItem,
-  ReviewCreateRequest,
   ChildAgeGroup,
+  ReviewCreateRequest,
+  ReviewListItem,
+  SpotDetail,
 } from "../types";
+
+function getErrorMessage(e: unknown, fallback: string) {
+  if (e instanceof Error) return e.message;
+  if (typeof e === "string") return e;
+  return fallback;
+}
 
 export default function SpotDetailPage() {
   const { id } = useParams();
@@ -20,30 +26,30 @@ export default function SpotDetailPage() {
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const [reviewsError, setReviewsError] = useState<string | null>(null);
 
-  const [showAllReviews, setShowAllReviews] = useState(false); // 初期は一部だけ表示する
-  const INITIAL_REVIEW_COUNT = 3; // 初期表示件数（必要なら5などに変更）
+  const [showAllReviews, setShowAllReviews] = useState(false);
+  const INITIAL_REVIEW_COUNT = 3;
 
-  // 投稿フォーム状態（必須＋任意）
+  // レビュー投稿フォーム（モーダル）
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+
   const [formRating, setFormRating] = useState<number>(0);
+  const [formChildAgeGroup, setFormChildAgeGroup] = useState<
+    ChildAgeGroup | ""
+  >("");
+  const [formReviewText, setFormReviewText] = useState<string>("");
 
-  // childAgeGroup はバックで@NotNullなので必須（未選択は "" で保持して送信前に弾く）
-  const [formChildAgeGroup, setFormChildAgeGroup] =
-    useState<ChildAgeGroup | "">(""); // （必須）
-
-  const [formReviewText, setFormReviewText] = useState<string>(""); // （必須）
-
-  const [formRatingCost, setFormRatingCost] = useState<string>(""); // （任意：入力は文字列で保持）
-  const [formCrowdLevel, setFormCrowdLevel] = useState<string>(""); // （任意）
-  const [formToiletCleanliness, setFormToiletCleanliness] =
-    useState<string>(""); // （任意）
-  const [formStrollerEase, setFormStrollerEase] = useState<string>(""); // （任意）
-  const [formCostTotal, setFormCostTotal] = useState<string>(""); // （任意）
+  const [formRatingCost, setFormRatingCost] = useState<string>("");
+  const [formCrowdLevel, setFormCrowdLevel] = useState<string>("");
+  const [formToiletCleanliness, setFormToiletCleanliness] = useState<string>(
+    ""
+  );
+  const [formStrollerEase, setFormStrollerEase] = useState<string>("");
+  const [formCostTotal, setFormCostTotal] = useState<string>("");
 
   const [submitLoading, setSubmitLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
 
-  // ChildAgeGroupの表示ラベル（UI用）
   const childAgeGroupOptions = useMemo(
     () => [
       { value: "PRESCHOOL" as const, label: "未就学児" },
@@ -54,7 +60,6 @@ export default function SpotDetailPage() {
     []
   );
 
-  // 任意評価（1〜5）用の選択肢
   const ratingOptions = useMemo(() => [1, 2, 3, 4, 5], []);
 
   useEffect(() => {
@@ -64,9 +69,9 @@ export default function SpotDetailPage() {
       try {
         const data = await fetchSpotDetail(Number(id));
         setSpot(data);
-      } catch (e: any) {
+      } catch (e: unknown) {
         console.error(e);
-        setError(e.message ?? "スポット詳細の取得に失敗しました。");
+        setError(getErrorMessage(e, "スポット詳細の取得に失敗しました。"));
       } finally {
         setLoading(false);
       }
@@ -75,15 +80,14 @@ export default function SpotDetailPage() {
     load();
   }, [id]);
 
-  // レビュー再取得を関数化（投稿後も使う）
   const reloadReviews = async (spotId: number) => {
     try {
       const data = await fetchReviewsBySpotId(spotId);
       setReviews(data);
       setReviewsError(null);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
-      setReviewsError(e.message ?? "レビュー一覧の取得に失敗しました。");
+      setReviewsError(getErrorMessage(e, "レビュー一覧の取得に失敗しました。"));
     } finally {
       setReviewsLoading(false);
     }
@@ -95,12 +99,24 @@ export default function SpotDetailPage() {
     const spotId = Number(id);
 
     const loadReviews = async () => {
-      setReviewsLoading(true); // 再取得でも使うので明示
+      setReviewsLoading(true);
       await reloadReviews(spotId);
     };
 
     loadReviews();
   }, [id]);
+
+  // モーダル表示中：Escキーで閉じる
+  useEffect(() => {
+    if (!isReviewModalOpen) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsReviewModalOpen(false);
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isReviewModalOpen]);
 
   const formatDateTime = (isoString: string) => {
     const d = new Date(isoString);
@@ -108,7 +124,6 @@ export default function SpotDetailPage() {
     return d.toLocaleString();
   };
 
-  // ★表示を星アイコンにする（1〜5）
   const renderStars = (rating: number) => {
     const max = 5;
     const full = Math.max(0, Math.min(max, rating));
@@ -131,11 +146,7 @@ export default function SpotDetailPage() {
     );
   };
 
-  // 投稿フォーム用の「クリックできる星」
-  const renderClickableStars = (
-    value: number,
-    onChange: (v: number) => void
-  ) => {
+  const renderClickableStars = (value: number, onChange: (v: number) => void) => {
     const max = 5;
     const full = Math.max(0, Math.min(max, value));
 
@@ -155,7 +166,7 @@ export default function SpotDetailPage() {
             >
               <svg
                 viewBox="0 0 20 20"
-                className="h-5 w-5"
+                className="h-6 w-6"
                 fill={filled ? "currentColor" : "none"}
                 stroke="currentColor"
                 strokeWidth="1"
@@ -172,9 +183,8 @@ export default function SpotDetailPage() {
   const hasMoreReviews = reviews.length > INITIAL_REVIEW_COUNT;
   const visibleReviews = showAllReviews
     ? reviews
-    : reviews.slice(0, INITIAL_REVIEW_COUNT); // 表示対象（初期は先頭3件だけ）
+    : reviews.slice(0, INITIAL_REVIEW_COUNT);
 
-  // 任意入力（selectの文字列）→ number|null に変換
   const toNullableNumber = (v: string): number | null => {
     const trimmed = v.trim();
     if (trimmed === "") return null;
@@ -183,20 +193,35 @@ export default function SpotDetailPage() {
     return n;
   };
 
-  // 投稿処理
+  const resetReviewForm = () => {
+    setFormRating(0);
+    setFormChildAgeGroup("");
+    setFormReviewText("");
+    setFormRatingCost("");
+    setFormCrowdLevel("");
+    setFormToiletCleanliness("");
+    setFormStrollerEase("");
+    setFormCostTotal("");
+    setSubmitError(null);
+    setSubmitSuccess(null);
+  };
+
+  const openReviewModal = () => {
+    resetReviewForm();
+    setIsReviewModalOpen(true);
+  };
+
   const handleSubmitReview = async () => {
     if (!id) return;
 
     const spotId = Number(id);
 
-    // 簡易バリデーション（必須）
     if (formRating < 1 || formRating > 5) {
       setSubmitError("総合評価（★）は1〜5で選択してください。");
       setSubmitSuccess(null);
       return;
     }
 
-    // childAgeGroup 必須（バックで@NotNull）
     if (formChildAgeGroup === "") {
       setSubmitError("子どもの年齢帯は必須です。選択してください。");
       setSubmitSuccess(null);
@@ -215,388 +240,695 @@ export default function SpotDetailPage() {
 
     try {
       const body: ReviewCreateRequest = {
-        childAgeGroup: formChildAgeGroup, // 必須なので必ず送る
-        rating: formRating, // 必須
-        ratingCost: toNullableNumber(formRatingCost), // 任意
-        crowdLevel: toNullableNumber(formCrowdLevel), // 任意
-        toiletCleanliness: toNullableNumber(formToiletCleanliness), // 任意
-        strollerEase: toNullableNumber(formStrollerEase), // 任意
-        reviewText: formReviewText.trim(), // 必須
-        costTotal: toNullableNumber(formCostTotal), // 任意（0以上）
+        childAgeGroup: formChildAgeGroup,
+        rating: formRating,
+        ratingCost: toNullableNumber(formRatingCost),
+        crowdLevel: toNullableNumber(formCrowdLevel),
+        toiletCleanliness: toNullableNumber(formToiletCleanliness),
+        strollerEase: toNullableNumber(formStrollerEase),
+        reviewText: formReviewText.trim(),
+        costTotal: toNullableNumber(formCostTotal),
       };
 
       await createReview(spotId, body);
 
-      // 投稿成功 → フォーム初期化
-      setFormRating(0);
-      setFormChildAgeGroup(""); // 必須だが、送信後は未選択に戻す
-      setFormReviewText("");
-      setFormRatingCost("");
-      setFormCrowdLevel("");
-      setFormToiletCleanliness("");
-      setFormStrollerEase("");
-      setFormCostTotal("");
-
       setSubmitSuccess("レビューを投稿しました。");
-      setShowAllReviews(true); // 投稿後は全件表示でも良い
+      setShowAllReviews(true);
+
+      setIsReviewModalOpen(false);
       setReviewsLoading(true);
       await reloadReviews(spotId);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
-      setSubmitError(e.message ?? "レビュー投稿に失敗しました。");
+      setSubmitError(getErrorMessage(e, "レビュー投稿に失敗しました。"));
     } finally {
       setSubmitLoading(false);
     }
   };
 
   if (loading) {
-    return <div className="p-6 text-center text-gray-600">読み込み中...</div>;
+    return <div className="py-10 text-center text-slate-600">読み込み中...</div>;
   }
 
   if (error) {
-    return <div className="p-6 text-center text-red-600">エラー: {error}</div>;
+    return <div className="py-10 text-center text-red-600">エラー: {error}</div>;
   }
 
   if (!spot) {
     return (
-      <div className="p-6 text-center text-gray-600">
+      <div className="py-10 text-center text-slate-600">
         スポット情報が見つかりませんでした。
       </div>
     );
   }
 
+  // UI部品（見た目を統一）
+  const cardBase = "bg-white rounded-2xl border border-emerald-100 shadow-sm";
+  const cardHeader =
+    "px-6 py-5 border-b border-emerald-50 flex items-center justify-between";
+  const cardBody = "px-6 py-5";
+
+  // ラベル/値でメリハリ
+  const labelClass = "text-[11px] tracking-wide text-slate-500";
+  const valueClass = "mt-1 text-[15px] font-semibold text-slate-900";
+
+  // 詳細/設備カード用
+  const itemCard =
+    "rounded-xl border border-slate-200 bg-slate-50 p-4 hover:bg-white transition-colors";
+
+  // 要点カード用アイコン
+  const IconMap = (props: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" className={props.className}>
+      <path
+        d="M12 21s7-4.5 7-11a7 7 0 1 0-14 0c0 6.5 7 11 7 11Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+    </svg>
+  );
+
+  const IconTag = (props: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" className={props.className}>
+      <path
+        d="M20 13l-7 7a2 2 0 0 1-2.8 0L3 12V4h8l9 9Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M7.5 7.5h.01"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+
+  const IconWallet = (props: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" className={props.className}>
+      <path d="M3 7h18v14H3V7Z" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="M3 9V6a2 2 0 0 1 2-2h14"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M17 14h4v4h-4a2 2 0 0 1 0-4Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+    </svg>
+  );
+
+  const IconUsers = (props: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" className={props.className}>
+      <path
+        d="M16 11a4 4 0 1 0-8 0 4 4 0 0 0 8 0Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <path d="M4 21a8 8 0 0 1 16 0" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+
+  const badgeBase =
+    "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold border";
+
   return (
-    <div className="min-h-screen bg-gray-50 pb-16">
-      <main className="max-w-4xl mx-auto px-4 py-6">
-        {/* 戻るリンク */}
+    <div className="py-6">
+      <div className="mx-auto w-full max-w-5xl">
+        {/* 戻る */}
         <div className="mb-4">
-          <Link to="/" className="text-sm text-primary hover:underline">
+          <Link
+            to="/"
+            className="
+              inline-flex items-center gap-2
+              rounded-xl
+              border border-orange-200
+              bg-orange-50
+              px-4 py-2.5
+              text-sm font-semibold text-orange-700
+              shadow-sm
+              hover:bg-orange-100
+              transition
+            "
+          >
             ← 一覧に戻る
           </Link>
         </div>
 
-        {/* タイトル & 基本情報 */}
-        <section className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
-            {spot.name}
-          </h1>
-          <p className="text-sm text-gray-600 mb-1">{spot.address}</p>
-          <p className="text-sm text-gray-600 mb-1">エリア：{spot.area}</p>
-          <p className="text-sm text-gray-600 mb-1">
-            カテゴリ：{spot.categoryName}
-          </p>
-          <p className="text-sm text-gray-600">価格帯：{spot.priceType}</p>
+        {/* タイトル */}
+        <section className={`${cardBase} mb-4`}>
+          <div className={cardBody}>
+            <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 mb-2">
+              {spot.name}
+            </h1>
+            <p className="text-sm text-slate-600">{spot.address}</p>
+          </div>
         </section>
 
-        {/* 詳細情報（メモ系） */}
-        <section className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">詳細情報</h2>
+        {/* 要点（アイコン＋色付きバッジ） */}
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+          {/* エリア */}
+          <div className={`${cardBase} rounded-xl`}>
+            <div className="p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-bold text-slate-900">エリア</div>
+                <span
+                  className={`${badgeBase} border-sky-200 bg-sky-50 text-sky-800`}
+                >
+                  <IconMap className="h-4 w-4" />
+                  地域
+                </span>
+              </div>
+              <div className="mt-2 text-[15px] font-semibold text-slate-900">
+                {spot.area}
+              </div>
+              <div className="mt-1 text-xs text-slate-500">場所の目安</div>
+            </div>
+          </div>
 
-          <dl className="space-y-2 text-sm text-gray-700">
-            <div className="flex">
-              <dt className="w-28 font-semibold text-gray-500">対象年齢</dt>
-              <dd>{spot.targetAge ?? "情報なし"}</dd>
+          {/* カテゴリ */}
+          <div className={`${cardBase} rounded-xl`}>
+            <div className="p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-bold text-slate-900">カテゴリ</div>
+                <span
+                  className={`${badgeBase} border-emerald-200 bg-emerald-50 text-emerald-800`}
+                >
+                  <IconTag className="h-4 w-4" />
+                  種別
+                </span>
+              </div>
+              <div className="mt-2 text-[15px] font-semibold text-slate-900">
+                {spot.categoryName}
+              </div>
+              <div className="mt-1 text-xs text-slate-500">どんなスポット？</div>
             </div>
-            <div className="flex">
-              <dt className="w-28 font-semibold text-gray-500">滞在目安</dt>
-              <dd>{spot.stayingTime ?? "情報なし"}</dd>
+          </div>
+
+          {/* 予算 */}
+          <div className={`${cardBase} rounded-xl`}>
+            <div className="p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-bold text-slate-900">予算</div>
+                <span
+                  className={`${badgeBase} border-orange-200 bg-orange-50 text-orange-800`}
+                >
+                  <IconWallet className="h-4 w-4" />
+                  コスト
+                </span>
+              </div>
+              <div className="mt-2 text-[15px] font-semibold text-slate-900">
+                {spot.priceType}
+              </div>
+              <div className="mt-1 text-xs text-slate-500">お出かけ費用</div>
             </div>
-            <div className="flex">
-              <dt className="w-28 font-semibold text-gray-500">駐車場</dt>
-              <dd>{spot.parkingInfo ?? "情報なし"}</dd>
+          </div>
+
+          {/* 対象年齢 */}
+          <div className={`${cardBase} rounded-xl`}>
+            <div className="p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-bold text-slate-900">対象年齢</div>
+                <span
+                  className={`${badgeBase} border-violet-200 bg-violet-50 text-violet-800`}
+                >
+                  <IconUsers className="h-4 w-4" />
+                  年齢
+                </span>
+              </div>
+              <div className="mt-2 text-[15px] font-semibold text-slate-900">
+                {spot.targetAge ?? "情報なし"}
+              </div>
+              <div className="mt-1 text-xs text-slate-500">子ども向け目安</div>
             </div>
-            <div className="flex">
-              <dt className="w-28 font-semibold text-gray-500">トイレ</dt>
-              <dd>{spot.toiletInfo ?? "情報なし"}</dd>
+          </div>
+        </section>
+
+        {/* 詳細情報 */}
+        <section className={`${cardBase} mb-6`}>
+          <div className={cardHeader}>
+            <h2 className="text-lg font-bold text-slate-900">詳細情報</h2>
+            <span className="text-xs text-slate-500">行く前に確認</span>
+          </div>
+
+          <div className={cardBody}>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className={itemCard}>
+                <div className={labelClass}>滞在目安</div>
+                <div className={valueClass}>
+                  {spot.stayingTime ?? "情報なし"}
+                </div>
+              </div>
+
+              <div className={itemCard}>
+                <div className={labelClass}>駐車場</div>
+                <div className={valueClass}>
+                  {spot.parkingInfo ?? "情報なし"}
+                </div>
+              </div>
+
+              <div className={itemCard}>
+                <div className={labelClass}>トイレ</div>
+                <div className={valueClass}>{spot.toiletInfo ?? "情報なし"}</div>
+              </div>
+
+              <div className={itemCard}>
+                <div className={labelClass}>コンビニ</div>
+                <div className={valueClass}>
+                  {spot.convenienceStore ?? "情報なし"}
+                </div>
+              </div>
+
+              <div className={itemCard}>
+                <div className={labelClass}>飲食店</div>
+                <div className={valueClass}>
+                  {spot.restaurantInfo ?? "情報なし"}
+                </div>
+              </div>
+
+              <div className={itemCard}>
+                <div className={labelClass}>定休日</div>
+                <div className={valueClass}>{spot.closedDays ?? "情報なし"}</div>
+              </div>
+
+              <div className={`${itemCard} md:col-span-2 lg:col-span-3`}>
+                <div className={labelClass}>備考</div>
+                <div className={`${valueClass} whitespace-pre-wrap`}>
+                  {spot.notes ?? "特になし"}
+                </div>
+              </div>
             </div>
-            <div className="flex">
-              <dt className="w-28 font-semibold text-gray-500">コンビニ</dt>
-              <dd>{spot.convenienceStore ?? "情報なし"}</dd>
-            </div>
-            <div className="flex">
-              <dt className="w-28 font-semibold text-gray-500">飲食店</dt>
-              <dd>{spot.restaurantInfo ?? "情報なし"}</dd>
-            </div>
-            <div className="flex">
-              <dt className="w-28 font-semibold text-gray-500">定休日</dt>
-              <dd>{spot.closedDays ?? "情報なし"}</dd>
-            </div>
-            <div className="flex">
-              <dt className="w-28 font-semibold text-gray-500">備考</dt>
-              <dd>{spot.notes ?? "特になし"}</dd>
-            </div>
-          </dl>
+          </div>
         </section>
 
         {/* 設備情報 */}
-        <section className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">設備情報</h2>
-          <ul className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-700">
-            <li>オムツ替え：{spot.diaperChanging ? "あり" : "なし"}</li>
-            <li>ベビーカー：{spot.strollerOk ? "OK" : "NG"}</li>
-            <li>遊具：{spot.playground ? "あり" : "なし"}</li>
-            <li>
-              アスレチックコース：{spot.athletics ? "あり" : "なし"}
-            </li>
-            <li>水遊び：{spot.waterPlay ? "あり" : "なし"}</li>
-            <li>屋内施設：{spot.indoor ? "あり" : "なし"}</li>
-          </ul>
-        </section>
+        <section className={`${cardBase} mb-6`}>
+          <div className={cardHeader}>
+            <h2 className="text-lg font-bold text-slate-900">設備情報</h2>
+            <span className="text-xs text-slate-500">子連れ視点</span>
+          </div>
 
-        {/* リンク系 */}
-        <section className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">外部リンク</h2>
-          <div className="flex flex-col gap-2 text-sm">
-            {spot.googleMapUrl && (
-              <a
-                href={spot.googleMapUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-primary underline"
-              >
-                Googleマップで開く
-              </a>
-            )}
-            {spot.officialUrl && (
-              <a
-                href={spot.officialUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-primary underline"
-              >
-                公式サイトを見る
-              </a>
-            )}
-            {!spot.googleMapUrl && !spot.officialUrl && (
-              <p className="text-gray-500">リンク情報は登録されていません。</p>
-            )}
+          <div className={cardBody}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className={itemCard}>
+                <div className={labelClass}>オムツ替え</div>
+                <div className={valueClass}>
+                  {spot.diaperChanging ? "あり" : "なし"}
+                </div>
+              </div>
+
+              <div className={itemCard}>
+                <div className={labelClass}>ベビーカー</div>
+                <div className={valueClass}>{spot.strollerOk ? "OK" : "NG"}</div>
+              </div>
+
+              <div className={itemCard}>
+                <div className={labelClass}>遊具</div>
+                <div className={valueClass}>{spot.playground ? "あり" : "なし"}</div>
+              </div>
+
+              <div className={itemCard}>
+                <div className={labelClass}>アスレチックコース</div>
+                <div className={valueClass}>{spot.athletics ? "あり" : "なし"}</div>
+              </div>
+
+              <div className={itemCard}>
+                <div className={labelClass}>水遊び</div>
+                <div className={valueClass}>{spot.waterPlay ? "あり" : "なし"}</div>
+              </div>
+
+              <div className={itemCard}>
+                <div className={labelClass}>屋内施設</div>
+                <div className={valueClass}>{spot.indoor ? "あり" : "なし"}</div>
+              </div>
+            </div>
           </div>
         </section>
 
-        {/* レビュー（投稿フォーム + 一覧） */}
-        <section className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mt-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">
-            レビュー
-            {!reviewsLoading && !reviewsError && `（${reviews.length}件）`}
-          </h2>
+        {/* 外部リンク */}
+        <section className={`${cardBase} mb-6`}>
+          <div className={cardHeader}>
+            <h2 className="text-lg font-bold text-slate-900">外部リンク</h2>
+            <span className="text-xs text-slate-500">地図 / 公式</span>
+          </div>
 
-          {/* 投稿フォーム（任意項目も表示） */}
-          <div className="border border-gray-100 rounded-lg p-4 mb-6">
-            <div className="font-semibold text-gray-900 mb-3">
+          <div className={cardBody}>
+            <div className="flex flex-col sm:flex-row gap-3">
+              {spot.googleMapUrl && (
+                <a
+                  href={spot.googleMapUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="
+                    inline-flex items-center justify-center gap-2
+                    rounded-xl
+                    border border-sky-200
+                    bg-sky-50
+                    px-4 py-3
+                    text-sm font-semibold text-sky-800
+                    hover:bg-sky-100
+                    transition-colors
+                  "
+                >
+                  📍 Googleマップで開く
+                </a>
+              )}
+
+              {spot.officialUrl && (
+                <a
+                  href={spot.officialUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="
+                    inline-flex items-center justify-center gap-2
+                    rounded-xl
+                    border border-slate-200
+                    bg-white
+                    px-4 py-3
+                    text-sm font-semibold text-slate-700
+                    hover:bg-slate-50
+                    transition-colors
+                  "
+                >
+                  🔗 公式サイトを見る
+                </a>
+              )}
+
+              {!spot.googleMapUrl && !spot.officialUrl && (
+                <p className="text-slate-600 text-sm">
+                  リンク情報は登録されていません。
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* レビュー */}
+        <section className={`${cardBase}`}>
+          <div className={cardHeader}>
+            <h2 className="text-lg font-bold text-slate-900">
+              レビュー
+              {!reviewsLoading && !reviewsError && `（${reviews.length}件）`}
+            </h2>
+
+            <button
+              type="button"
+              onClick={openReviewModal}
+              className="
+                rounded-xl
+                bg-orange-500
+                px-4 py-2
+                text-sm font-semibold text-white
+                shadow-sm
+                transition
+                hover:bg-orange-600
+                focus:outline-none focus:ring-2 focus:ring-orange-200
+              "
+            >
               レビューを投稿する
-            </div>
+            </button>
+          </div>
 
-            {submitError && (
-              <div className="text-sm text-red-600 mb-3">エラー: {submitError}</div>
+          <div className={cardBody}>
+            {reviewsLoading && (
+              <div className="text-sm text-slate-600">読み込み中...</div>
             )}
-            {submitSuccess && (
-              <div className="text-sm text-green-600 mb-3">{submitSuccess}</div>
+
+            {reviewsError && (
+              <div className="text-sm text-red-600">エラー: {reviewsError}</div>
             )}
 
-            {/* 必須：総合評価 */}
-            <div className="mb-4">
-              <div className="text-sm font-semibold text-gray-700 mb-1">
-                総合評価（必須）
+            {!reviewsLoading && !reviewsError && reviews.length === 0 && (
+              <div className="text-sm text-slate-600">
+                まだレビューがありません。最初のレビューを書いてみませんか？
               </div>
-              <div className="flex items-center gap-3 text-yellow-500">
-                {renderClickableStars(formRating, setFormRating)}
-                <span className="text-sm text-gray-700">
-                  {formRating > 0 ? `${formRating}/5` : "未選択"}
-                </span>
-              </div>
-            </div>
+            )}
 
-            {/* 必須：子どもの年齢帯（バックで@NotNull） */}
-            <div className="mb-4">
-              <div className="text-sm font-semibold text-gray-700 mb-1">
-                子どもの年齢帯（必須）
-              </div>
-              <select
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-                value={formChildAgeGroup}
-                onChange={(e) =>
-                  setFormChildAgeGroup(e.target.value as ChildAgeGroup | "")
-                }
-              >
-                <option value="">選択してください</option>
-                {childAgeGroupOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {!reviewsLoading && !reviewsError && reviews.length > 0 && (
+              <>
+                <ul className="space-y-4">
+                  {visibleReviews.map((r) => (
+                    <li
+                      key={r.id}
+                      className="border border-slate-200 rounded-2xl p-4 bg-slate-50"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="font-semibold text-slate-900">
+                            {r.userName}
+                          </div>
+                          <div className="text-xs text-slate-500 mt-1">
+                            {formatDateTime(r.createdAt)}
+                          </div>
+                        </div>
 
-            {/* 必須：レビュー本文 */}
-            <div className="mb-4">
-              <div className="text-sm font-semibold text-gray-700 mb-1">
-                レビュー本文（必須）
-              </div>
-              <textarea
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm min-h-[110px]"
-                value={formReviewText}
-                onChange={(e) => setFormReviewText(e.target.value)}
-                placeholder="例：遊具が多くて子どもが楽しめました。トイレもきれいで助かりました。"
-              />
-            </div>
+                        <div className="flex items-center gap-2 text-sm text-slate-700">
+                          <span className="text-yellow-500">
+                            {renderStars(r.rating)}
+                          </span>
+                          <span className="font-semibold">{r.rating}/5</span>
+                        </div>
+                      </div>
 
-            {/* 任意：詳細評価（selectで入力） */}
-            <div className="mb-4">
-              <div className="text-sm font-semibold text-gray-700 mb-2">
-                詳細評価（任意）
-              </div>
+                      <div className="text-sm text-slate-700 mt-3 whitespace-pre-wrap leading-relaxed">
+                        {r.reviewText}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <div className="text-xs text-gray-600 mb-1">コスパ（1〜5）</div>
-                  <select
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-                    value={formRatingCost}
-                    onChange={(e) => setFormRatingCost(e.target.value)}
-                  >
-                    <option value="">未入力</option>
-                    {ratingOptions.map((n) => (
-                      <option key={n} value={String(n)}>
-                        {n}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <div className="text-xs text-gray-600 mb-1">混雑度（1〜5）</div>
-                  <select
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-                    value={formCrowdLevel}
-                    onChange={(e) => setFormCrowdLevel(e.target.value)}
-                  >
-                    <option value="">未入力</option>
-                    {ratingOptions.map((n) => (
-                      <option key={n} value={String(n)}>
-                        {n}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <div className="text-xs text-gray-600 mb-1">
-                    トイレ清潔度（1〜5）
+                {hasMoreReviews && !showAllReviews && (
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      className="px-4 py-2 rounded-xl border border-slate-200 text-sm text-slate-700 hover:bg-slate-50"
+                      onClick={() => setShowAllReviews(true)}
+                    >
+                      もっと見る
+                    </button>
                   </div>
-                  <select
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-                    value={formToiletCleanliness}
-                    onChange={(e) => setFormToiletCleanliness(e.target.value)}
-                  >
-                    <option value="">未入力</option>
-                    {ratingOptions.map((n) => (
-                      <option key={n} value={String(n)}>
-                        {n}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                )}
+              </>
+            )}
+          </div>
+        </section>
+      </div>
 
-                <div>
-                  <div className="text-xs text-gray-600 mb-1">
-                    ベビーカー（1〜5）
-                  </div>
-                  <select
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-                    value={formStrollerEase}
-                    onChange={(e) => setFormStrollerEase(e.target.value)}
-                  >
-                    <option value="">未入力</option>
-                    {ratingOptions.map((n) => (
-                      <option key={n} value={String(n)}>
-                        {n}
-                      </option>
-                    ))}
-                  </select>
+      {/* レビュー投稿モーダル */}
+      {isReviewModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setIsReviewModalOpen(false)}
+          aria-modal="true"
+          role="dialog"
+        >
+          <div
+            className="w-full max-w-2xl rounded-2xl bg-white shadow-xl border border-orange-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-5 border-b border-orange-100 flex items-center justify-between">
+              <div>
+                <div className="text-lg font-bold text-slate-900">
+                  レビューを投稿する
+                </div>
+                <div className="text-xs text-slate-500 mt-1">
+                  ※ 必須：総合評価・年齢帯・本文
                 </div>
               </div>
-            </div>
 
-            {/* 任意：合計金額 */}
-            <div className="mb-5">
-              <div className="text-sm font-semibold text-gray-700 mb-1">
-                合計金額（任意）
-              </div>
-              <input
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-                value={formCostTotal}
-                onChange={(e) => setFormCostTotal(e.target.value)}
-                placeholder="例：1500"
-                inputMode="numeric"
-              />
-              <div className="text-xs text-gray-500 mt-1">
-                ※ 数字のみ（未入力なら送信しません）
-              </div>
-            </div>
-
-            <div>
               <button
                 type="button"
-                className="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                onClick={handleSubmitReview}
+                className="rounded-lg px-2 py-1 text-slate-500 hover:bg-slate-100"
+                onClick={() => setIsReviewModalOpen(false)}
+                aria-label="閉じる"
                 disabled={submitLoading}
               >
-                {submitLoading ? "送信中..." : "送信"}
+                ✕
               </button>
             </div>
-          </div>
 
-          {reviewsLoading && (
-            <div className="text-sm text-gray-600">読み込み中...</div>
-          )}
-
-          {reviewsError && (
-            <div className="text-sm text-red-600">エラー: {reviewsError}</div>
-          )}
-
-          {!reviewsLoading && !reviewsError && reviews.length === 0 && (
-            <div className="text-sm text-gray-600">レビューはまだありません。</div>
-          )}
-
-          {!reviewsLoading && !reviewsError && reviews.length > 0 && (
-            <>
-              <ul className="space-y-4">
-                {visibleReviews.map((r) => (
-                  <li key={r.id} className="border border-gray-100 rounded-lg p-4">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="font-semibold text-gray-900">{r.userName}</div>
-                      <div className="flex items-center gap-2 text-sm text-gray-700">
-                        <span className="text-yellow-500">{renderStars(r.rating)}</span>
-                        <span>{r.rating}/5</span>
-                      </div>
-                    </div>
-
-                    <div className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">
-                      {r.reviewText}
-                    </div>
-
-                    <div className="text-xs text-gray-500 mt-2">
-                      {formatDateTime(r.createdAt)}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-
-              {hasMoreReviews && !showAllReviews && (
-                <div className="mt-4">
-                  <button
-                    type="button"
-                    className="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 hover:bg-gray-50"
-                    onClick={() => setShowAllReviews(true)}
-                  >
-                    もっと見る
-                  </button>
+            <div className="px-6 py-5">
+              {submitError && (
+                <div className="text-sm text-red-600 mb-3">
+                  エラー: {submitError}
                 </div>
               )}
-            </>
-          )}
-        </section>
-      </main>
+
+              {submitSuccess && (
+                <div className="text-sm text-emerald-700 mb-3">
+                  {submitSuccess}
+                </div>
+              )}
+
+              <div className="mb-4">
+                <div className="text-sm font-semibold text-slate-700 mb-1">
+                  総合評価（必須）
+                </div>
+                <div className="flex items-center gap-3 text-yellow-500">
+                  {renderClickableStars(formRating, setFormRating)}
+                  <span className="text-sm text-slate-700">
+                    {formRating > 0 ? `${formRating}/5` : "未選択"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <div className="text-sm font-semibold text-slate-700 mb-1">
+                  子どもの年齢帯（必須）
+                </div>
+                <select
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                  value={formChildAgeGroup}
+                  onChange={(e) =>
+                    setFormChildAgeGroup(e.target.value as ChildAgeGroup | "")
+                  }
+                >
+                  <option value="">選択してください</option>
+                  {childAgeGroupOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="mb-4">
+                <div className="text-sm font-semibold text-slate-700 mb-1">
+                  レビュー本文（必須）
+                </div>
+                <textarea
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm min-h-[120px] bg-white"
+                  value={formReviewText}
+                  onChange={(e) => setFormReviewText(e.target.value)}
+                  placeholder="例：遊具が多くて子どもが楽しめました。トイレもきれいで助かりました。"
+                />
+              </div>
+
+              <div className="mb-4">
+                <div className="text-sm font-semibold text-slate-700 mb-2">
+                  詳細評価（任意）
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <div className="text-xs text-slate-600 mb-1">
+                      コスパ（1〜5）
+                    </div>
+                    <select
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                      value={formRatingCost}
+                      onChange={(e) => setFormRatingCost(e.target.value)}
+                    >
+                      <option value="">未入力</option>
+                      {ratingOptions.map((n) => (
+                        <option key={n} value={String(n)}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <div className="text-xs text-slate-600 mb-1">
+                      混雑度（1〜5）
+                    </div>
+                    <select
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                      value={formCrowdLevel}
+                      onChange={(e) => setFormCrowdLevel(e.target.value)}
+                    >
+                      <option value="">未入力</option>
+                      {ratingOptions.map((n) => (
+                        <option key={n} value={String(n)}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <div className="text-xs text-slate-600 mb-1">
+                      トイレ清潔度（1〜5）
+                    </div>
+                    <select
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                      value={formToiletCleanliness}
+                      onChange={(e) => setFormToiletCleanliness(e.target.value)}
+                    >
+                      <option value="">未入力</option>
+                      {ratingOptions.map((n) => (
+                        <option key={n} value={String(n)}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <div className="text-xs text-slate-600 mb-1">
+                      ベビーカー（1〜5）
+                    </div>
+                    <select
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                      value={formStrollerEase}
+                      onChange={(e) => setFormStrollerEase(e.target.value)}
+                    >
+                      <option value="">未入力</option>
+                      {ratingOptions.map((n) => (
+                        <option key={n} value={String(n)}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mb-5">
+                <div className="text-sm font-semibold text-slate-700 mb-1">
+                  合計金額（任意）
+                </div>
+                <input
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                  value={formCostTotal}
+                  onChange={(e) => setFormCostTotal(e.target.value)}
+                  placeholder="例：1500"
+                  inputMode="numeric"
+                />
+                <div className="text-xs text-slate-600 mt-1">
+                  ※ 数字のみ（未入力なら送信しません）
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50"
+                  onClick={() => setIsReviewModalOpen(false)}
+                  disabled={submitLoading}
+                >
+                  キャンセル
+                </button>
+
+                <button
+                  type="button"
+                  className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 active:bg-orange-700 disabled:opacity-50 transition-colors shadow-sm"
+                  onClick={handleSubmitReview}
+                  disabled={submitLoading}
+                >
+                  {submitLoading ? "送信中..." : "送信"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
