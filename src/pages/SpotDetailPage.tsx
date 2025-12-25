@@ -2,6 +2,7 @@ import { Link, useParams } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { fetchSpotDetail } from "../api/spots";
 import { createReview, fetchReviewsBySpotId } from "../api/reviews";
+import { addFavorite, removeFavorite } from "../api/favorites";
 import type {
   ChildAgeGroup,
   ReviewCreateRequest,
@@ -49,6 +50,9 @@ export default function SpotDetailPage() {
   const [submitLoading, setSubmitLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
+
+  // お気に入り更新用
+  const [favoriteError, setFavoriteError] = useState<string | null>(null);
 
   const childAgeGroupOptions = useMemo(
     () => [
@@ -266,6 +270,30 @@ export default function SpotDetailPage() {
     }
   };
 
+  // 詳細ページのお気に入り切替
+  const toggleFavorite = async () => {
+    if (!spot) return;
+
+    const spotId = spot.id;
+    const next = !spot.isFavorite;
+
+    // 楽観更新
+    setSpot({ ...spot, isFavorite: next });
+    setFavoriteError(null);
+
+    try {
+      if (next) {
+        await addFavorite(spotId);
+      } else {
+        await removeFavorite(spotId);
+      }
+    } catch (e: unknown) {
+      // ロールバック
+      setSpot({ ...spot, isFavorite: !next });
+      setFavoriteError(getErrorMessage(e, "お気に入り更新に失敗しました。"));
+    }
+  };
+
   if (loading) {
     return <div className="py-10 text-center text-slate-600">読み込み中...</div>;
   }
@@ -282,21 +310,17 @@ export default function SpotDetailPage() {
     );
   }
 
-  // UI部品（見た目を統一）
   const cardBase = "bg-white rounded-2xl border border-emerald-100 shadow-sm";
   const cardHeader =
     "px-6 py-5 border-b border-emerald-50 flex items-center justify-between";
   const cardBody = "px-6 py-5";
 
-  // ラベル/値でメリハリ
   const labelClass = "text-[11px] tracking-wide text-slate-500";
   const valueClass = "mt-1 text-[15px] font-semibold text-slate-900";
 
-  // 詳細/設備カード用
   const itemCard =
     "rounded-xl border border-slate-200 bg-slate-50 p-4 hover:bg-white transition-colors";
 
-  // 要点カード用アイコン
   const IconMap = (props: { className?: string }) => (
     <svg viewBox="0 0 24 24" fill="none" className={props.className}>
       <path
@@ -358,11 +382,14 @@ export default function SpotDetailPage() {
   const badgeBase =
     "inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold border";
 
+  const favoriteBtnBase =
+    "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold shadow-sm transition focus:outline-none focus:ring-2";
+
   return (
     <div className="py-6">
       <div className="mx-auto w-full max-w-5xl">
-        {/* 戻る */}
-        <div className="mb-4">
+        {/* 戻る + お気に入り */}
+        <div className="mb-4 flex items-center justify-between gap-3">
           <Link
             to="/"
             className="
@@ -379,7 +406,25 @@ export default function SpotDetailPage() {
           >
             ← 一覧に戻る
           </Link>
+
+          <button
+            type="button"
+            onClick={toggleFavorite}
+            className={
+              spot.isFavorite
+                ? `${favoriteBtnBase} border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 focus:ring-rose-200`
+                : `${favoriteBtnBase} border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 focus:ring-slate-200`
+            }
+            aria-label={spot.isFavorite ? "お気に入り解除" : "お気に入り登録"}
+          >
+            <span className="text-lg">{spot.isFavorite ? "❤️" : "🤍"}</span>
+            {spot.isFavorite ? "お気に入り中" : "お気に入り"}
+          </button>
         </div>
+
+        {favoriteError && (
+          <div className="mb-4 text-sm text-red-600">エラー: {favoriteError}</div>
+        )}
 
         {/* タイトル */}
         <section className={`${cardBase} mb-4`}>
@@ -393,14 +438,11 @@ export default function SpotDetailPage() {
 
         {/* 要点（アイコン＋色付きバッジ） */}
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-          {/* エリア */}
           <div className={`${cardBase} rounded-xl`}>
             <div className="p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-bold text-slate-900">エリア</div>
-                <span
-                  className={`${badgeBase} border-sky-200 bg-sky-50 text-sky-800`}
-                >
+                <span className={`${badgeBase} border-sky-200 bg-sky-50 text-sky-800`}>
                   <IconMap className="h-4 w-4" />
                   地域
                 </span>
@@ -412,14 +454,11 @@ export default function SpotDetailPage() {
             </div>
           </div>
 
-          {/* カテゴリ */}
           <div className={`${cardBase} rounded-xl`}>
             <div className="p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-bold text-slate-900">カテゴリ</div>
-                <span
-                  className={`${badgeBase} border-emerald-200 bg-emerald-50 text-emerald-800`}
-                >
+                <span className={`${badgeBase} border-emerald-200 bg-emerald-50 text-emerald-800`}>
                   <IconTag className="h-4 w-4" />
                   種別
                 </span>
@@ -431,14 +470,11 @@ export default function SpotDetailPage() {
             </div>
           </div>
 
-          {/* 予算 */}
           <div className={`${cardBase} rounded-xl`}>
             <div className="p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-bold text-slate-900">予算</div>
-                <span
-                  className={`${badgeBase} border-orange-200 bg-orange-50 text-orange-800`}
-                >
+                <span className={`${badgeBase} border-orange-200 bg-orange-50 text-orange-800`}>
                   <IconWallet className="h-4 w-4" />
                   コスト
                 </span>
@@ -450,14 +486,11 @@ export default function SpotDetailPage() {
             </div>
           </div>
 
-          {/* 対象年齢 */}
           <div className={`${cardBase} rounded-xl`}>
             <div className="p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-bold text-slate-900">対象年齢</div>
-                <span
-                  className={`${badgeBase} border-violet-200 bg-violet-50 text-violet-800`}
-                >
+                <span className={`${badgeBase} border-violet-200 bg-violet-50 text-violet-800`}>
                   <IconUsers className="h-4 w-4" />
                   年齢
                 </span>
@@ -481,16 +514,12 @@ export default function SpotDetailPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               <div className={itemCard}>
                 <div className={labelClass}>滞在目安</div>
-                <div className={valueClass}>
-                  {spot.stayingTime ?? "情報なし"}
-                </div>
+                <div className={valueClass}>{spot.stayingTime ?? "情報なし"}</div>
               </div>
 
               <div className={itemCard}>
                 <div className={labelClass}>駐車場</div>
-                <div className={valueClass}>
-                  {spot.parkingInfo ?? "情報なし"}
-                </div>
+                <div className={valueClass}>{spot.parkingInfo ?? "情報なし"}</div>
               </div>
 
               <div className={itemCard}>
@@ -500,16 +529,12 @@ export default function SpotDetailPage() {
 
               <div className={itemCard}>
                 <div className={labelClass}>コンビニ</div>
-                <div className={valueClass}>
-                  {spot.convenienceStore ?? "情報なし"}
-                </div>
+                <div className={valueClass}>{spot.convenienceStore ?? "情報なし"}</div>
               </div>
 
               <div className={itemCard}>
                 <div className={labelClass}>飲食店</div>
-                <div className={valueClass}>
-                  {spot.restaurantInfo ?? "情報なし"}
-                </div>
+                <div className={valueClass}>{spot.restaurantInfo ?? "情報なし"}</div>
               </div>
 
               <div className={itemCard}>
@@ -538,9 +563,7 @@ export default function SpotDetailPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className={itemCard}>
                 <div className={labelClass}>オムツ替え</div>
-                <div className={valueClass}>
-                  {spot.diaperChanging ? "あり" : "なし"}
-                </div>
+                <div className={valueClass}>{spot.diaperChanging ? "あり" : "なし"}</div>
               </div>
 
               <div className={itemCard}>
@@ -621,9 +644,7 @@ export default function SpotDetailPage() {
               )}
 
               {!spot.googleMapUrl && !spot.officialUrl && (
-                <p className="text-slate-600 text-sm">
-                  リンク情報は登録されていません。
-                </p>
+                <p className="text-slate-600 text-sm">リンク情報は登録されていません。</p>
               )}
             </div>
           </div>
@@ -656,13 +677,8 @@ export default function SpotDetailPage() {
           </div>
 
           <div className={cardBody}>
-            {reviewsLoading && (
-              <div className="text-sm text-slate-600">読み込み中...</div>
-            )}
-
-            {reviewsError && (
-              <div className="text-sm text-red-600">エラー: {reviewsError}</div>
-            )}
+            {reviewsLoading && <div className="text-sm text-slate-600">読み込み中...</div>}
+            {reviewsError && <div className="text-sm text-red-600">エラー: {reviewsError}</div>}
 
             {!reviewsLoading && !reviewsError && reviews.length === 0 && (
               <div className="text-sm text-slate-600">
@@ -680,18 +696,14 @@ export default function SpotDetailPage() {
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <div className="font-semibold text-slate-900">
-                            {r.userName}
-                          </div>
+                          <div className="font-semibold text-slate-900">{r.userName}</div>
                           <div className="text-xs text-slate-500 mt-1">
                             {formatDateTime(r.createdAt)}
                           </div>
                         </div>
 
                         <div className="flex items-center gap-2 text-sm text-slate-700">
-                          <span className="text-yellow-500">
-                            {renderStars(r.rating)}
-                          </span>
+                          <span className="text-yellow-500">{renderStars(r.rating)}</span>
                           <span className="font-semibold">{r.rating}/5</span>
                         </div>
                       </div>
@@ -734,9 +746,7 @@ export default function SpotDetailPage() {
           >
             <div className="px-6 py-5 border-b border-orange-100 flex items-center justify-between">
               <div>
-                <div className="text-lg font-bold text-slate-900">
-                  レビューを投稿する
-                </div>
+                <div className="text-lg font-bold text-slate-900">レビューを投稿する</div>
                 <div className="text-xs text-slate-500 mt-1">
                   ※ 必須：総合評価・年齢帯・本文
                 </div>
@@ -754,17 +764,8 @@ export default function SpotDetailPage() {
             </div>
 
             <div className="px-6 py-5">
-              {submitError && (
-                <div className="text-sm text-red-600 mb-3">
-                  エラー: {submitError}
-                </div>
-              )}
-
-              {submitSuccess && (
-                <div className="text-sm text-emerald-700 mb-3">
-                  {submitSuccess}
-                </div>
-              )}
+              {submitError && <div className="text-sm text-red-600 mb-3">エラー: {submitError}</div>}
+              {submitSuccess && <div className="text-sm text-emerald-700 mb-3">{submitSuccess}</div>}
 
               <div className="mb-4">
                 <div className="text-sm font-semibold text-slate-700 mb-1">
@@ -811,15 +812,11 @@ export default function SpotDetailPage() {
               </div>
 
               <div className="mb-4">
-                <div className="text-sm font-semibold text-slate-700 mb-2">
-                  詳細評価（任意）
-                </div>
+                <div className="text-sm font-semibold text-slate-700 mb-2">詳細評価（任意）</div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <div className="text-xs text-slate-600 mb-1">
-                      コスパ（1〜5）
-                    </div>
+                    <div className="text-xs text-slate-600 mb-1">コスパ（1〜5）</div>
                     <select
                       className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
                       value={formRatingCost}
@@ -835,9 +832,7 @@ export default function SpotDetailPage() {
                   </div>
 
                   <div>
-                    <div className="text-xs text-slate-600 mb-1">
-                      混雑度（1〜5）
-                    </div>
+                    <div className="text-xs text-slate-600 mb-1">混雑度（1〜5）</div>
                     <select
                       className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
                       value={formCrowdLevel}
@@ -853,9 +848,7 @@ export default function SpotDetailPage() {
                   </div>
 
                   <div>
-                    <div className="text-xs text-slate-600 mb-1">
-                      トイレ清潔度（1〜5）
-                    </div>
+                    <div className="text-xs text-slate-600 mb-1">トイレ清潔度（1〜5）</div>
                     <select
                       className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
                       value={formToiletCleanliness}
@@ -871,9 +864,7 @@ export default function SpotDetailPage() {
                   </div>
 
                   <div>
-                    <div className="text-xs text-slate-600 mb-1">
-                      ベビーカー（1〜5）
-                    </div>
+                    <div className="text-xs text-slate-600 mb-1">ベビーカー（1〜5）</div>
                     <select
                       className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
                       value={formStrollerEase}
@@ -891,9 +882,7 @@ export default function SpotDetailPage() {
               </div>
 
               <div className="mb-5">
-                <div className="text-sm font-semibold text-slate-700 mb-1">
-                  合計金額（任意）
-                </div>
+                <div className="text-sm font-semibold text-slate-700 mb-1">合計金額（任意）</div>
                 <input
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
                   value={formCostTotal}
@@ -901,10 +890,13 @@ export default function SpotDetailPage() {
                   placeholder="例：1500"
                   inputMode="numeric"
                 />
-                <div className="text-xs text-slate-600 mt-1">
-                  ※ 数字のみ（未入力なら送信しません）
-                </div>
+                <div className="text-xs text-slate-600 mt-1">※ 数字のみ（未入力なら送信しません）</div>
               </div>
+
+              {/* ✅ お気に入りエラーはモーダル外だが、ここにも出したいならここで表示OK */}
+              {favoriteError && (
+                <div className="text-sm text-red-600 mb-3">エラー: {favoriteError}</div>
+              )}
 
               <div className="flex items-center justify-end gap-3">
                 <button
