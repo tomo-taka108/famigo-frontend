@@ -38,17 +38,17 @@ const PRICE_OPTIONS: { value: PriceType; label: string }[] = [
 
 const AGE_OPTIONS: { value: AgeGroup; label: string }[] = [
   { value: "ALL", label: "全年齢" },
-  { value: "PRESCHOOL", label: "未就学児" },
-  { value: "ELE_LOW", label: "小学校低学年" },
-  { value: "ELE_HIGH", label: "小学校高学年" },
-  { value: "JUNIOR_HIGH", label: "中学生" },
+  { value: "PRESCHOOL", label: "未就学児まで" },
+  { value: "ELE_LOW", label: "小学校低学年まで" },
+  { value: "ELE_HIGH", label: "小学校高学年まで" },
+  { value: "JUNIOR_HIGH", label: "中学生まで" },
 ];
 
 const FACILITY_OPTIONS: { value: FacilityKey; label: string }[] = [
   { value: "diaper", label: "オムツ替え" },
   { value: "stroller", label: "ベビーカーOK" },
   { value: "playground", label: "遊具" },
-  { value: "athletics", label: "アスレチック" },
+  { value: "athletics", label: "アスレチックコース" },
   { value: "water", label: "水遊び" },
   { value: "indoor", label: "屋内" },
 ];
@@ -182,7 +182,7 @@ export const FilterModal: React.FC<FilterModalProps> = ({
           </button>
           <button
             onClick={onApply}
-            className="flex-[2] py-3 px-4 rounded-lg font-semibold text-white bg-orange-500 hover:bg-orange-600 shadow-lg shadow-orange-200 transition-all"
+            className="flex-2 py-3 px-4 rounded-lg font-semibold text-white bg-orange-500 hover:bg-orange-600 shadow-lg shadow-orange-200 transition-all"
           >
             この条件で検索
           </button>

@@ -804,7 +804,7 @@ export default function SpotDetailPage() {
                   レビュー本文（必須）
                 </div>
                 <textarea
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm min-h-[120px] bg-white"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm min-h-30 bg-white"
                   value={formReviewText}
                   onChange={(e) => setFormReviewText(e.target.value)}
                   placeholder="例：遊具が多くて子どもが楽しめました。トイレもきれいで助かりました。"

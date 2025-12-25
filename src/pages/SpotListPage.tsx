@@ -148,7 +148,7 @@ export default function SpotListPage() {
         <div className="py-4">
           <div className="rounded-2xl bg-white/90 backdrop-blur border border-emerald-200 shadow-md ring-1 ring-emerald-100/60 px-4 md:px-6 py-4">
             <div className="flex flex-col md:flex-row gap-3">
-              <div className="relative flex-grow">
+              <div className="relative grow">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <SearchIcon className="h-5 w-5 text-gray-400" />
                 </div>
