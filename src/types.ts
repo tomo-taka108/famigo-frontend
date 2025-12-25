@@ -10,6 +10,8 @@ export interface Spot {
   targetAge: string;
   googleMapUrl: string | null;
 
+  isFavorite: boolean;
+
   diaperChanging: boolean;
   strollerOk: boolean;
   playground: boolean;
@@ -98,6 +100,8 @@ export interface SpotDetail {
   closedDays: string | null;
   officialUrl: string | null;
   notes: string | null;
+
+  isFavorite: boolean;
 
   diaperChanging: boolean;
   strollerOk: boolean;
