@@ -1,16 +1,14 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom"; // ← 追加
+import { useNavigate } from "react-router-dom";
 import type { Category, FilterState, Spot } from "../types";
 import { fetchSpots } from "../api/spots";
 import { fetchCategories } from "../api/categories";
+import { addFavorite, removeFavorite } from "../api/favorites";
 
 import SpotCard from "../components/SpotCard";
 import { FilterModal } from "../components/FilterModal";
 import { SearchIcon, FilterIcon, MapIcon } from "../components/Icons";
 
-// ---------------------------------------------
-// unknown を安全に string にするユーティリティ
-// ---------------------------------------------
 function getErrorMessage(e: unknown, fallback: string) {
   if (e instanceof Error) return e.message;
   if (typeof e === "string") return e;
@@ -18,7 +16,7 @@ function getErrorMessage(e: unknown, fallback: string) {
 }
 
 export default function SpotListPage() {
-  const navigate = useNavigate(); // ← 追加（遷移用）
+  const navigate = useNavigate();
 
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
@@ -113,11 +111,27 @@ export default function SpotListPage() {
     }
   };
 
-  // ---------------------------------------------
-  // 詳細へ遷移（SpotCard から呼ばれる）
-  // ---------------------------------------------
   const goDetail = (id: number) => {
     navigate(`/spots/${id}`);
+  };
+
+  const toggleFavorite = async (spotId: number, next: boolean) => {
+    setSpots((prev) =>
+      prev.map((s) => (s.id === spotId ? { ...s, isFavorite: next } : s))
+    );
+
+    try {
+      if (next) {
+        await addFavorite(spotId);
+      } else {
+        await removeFavorite(spotId);
+      }
+    } catch (e: unknown) {
+      setSpots((prev) =>
+        prev.map((s) => (s.id === spotId ? { ...s, isFavorite: !next } : s))
+      );
+      setError(getErrorMessage(e, "お気に入り更新に失敗しました"));
+    }
   };
 
   if (loading) {
@@ -209,7 +223,8 @@ export default function SpotListPage() {
               <SpotCard
                 key={spot.id}
                 spot={spot}
-                onClickDetail={goDetail} // ← 追加：これで詳細へ行ける
+                onClickDetail={goDetail}
+                onToggleFavorite={toggleFavorite}
               />
             ))}
           </div>
