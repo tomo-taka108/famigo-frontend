@@ -6,6 +6,17 @@ import type { Spot, SpotDetail, FilterState } from "../types";
 const BASE_URL = "http://localhost:8080";
 
 // ---------------------------------------------
+// 0/1/true/false/null を安全に boolean にする
+// ---------------------------------------------
+const toBool = (v: unknown): boolean => {
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") return v !== 0;
+  if (typeof v === "string") return v !== "0" && v.toLowerCase() !== "false" && v !== "";
+  return false;
+};
+
+
+// ---------------------------------------------
 // Spot 一覧用 DTO（バックエンド → フロント）
 // ※バックエンド：SpotListItemDto と対応
 // ---------------------------------------------
@@ -19,6 +30,8 @@ export interface BackendSpotDto {
   targetAge: string;
   googleMapUrl: string | null;
 
+  isFavorite: boolean | number | null;
+
   // 注意：LEFT JOIN のため null の可能性あり（Boolean → null）
   diaperChanging: boolean | null;
   strollerOk: boolean | null;
@@ -29,7 +42,6 @@ export interface BackendSpotDto {
 }
 
 // Spot 一覧：BackendSpotDto → Spot 変換
-// null の設備フラグは false に補正して扱う
 export const mapBackendSpotToSpot = (dto: BackendSpotDto): Spot => {
   return {
     id: dto.id,
@@ -41,6 +53,8 @@ export const mapBackendSpotToSpot = (dto: BackendSpotDto): Spot => {
     targetAge: dto.targetAge,
     googleMapUrl: dto.googleMapUrl,
 
+    isFavorite: toBool(dto.isFavorite),
+
     diaperChanging: !!dto.diaperChanging,
     strollerOk: !!dto.strollerOk,
     playground: !!dto.playground,
@@ -49,6 +63,7 @@ export const mapBackendSpotToSpot = (dto: BackendSpotDto): Spot => {
     indoor: !!dto.indoor,
   };
 };
+
 
 // ---------------------------------------------
 // Spot詳細用 DTO（バックエンド → フロント）
@@ -61,6 +76,9 @@ export interface BackendSpotDetailDto {
   area: string;
   priceType: string;
   categoryName: string;
+
+  isFavorite: boolean | number | null;
+
   parkingInfo: string | null;
   toiletInfo: string | null;
   targetAge: string | null;
@@ -92,6 +110,9 @@ export const mapBackendSpotDetailToSpotDetail = (
     area: dto.area,
     priceType: dto.priceType,
     categoryName: dto.categoryName,
+
+    isFavorite: toBool(dto.isFavorite),
+
     parkingInfo: dto.parkingInfo,
     toiletInfo: dto.toiletInfo,
     targetAge: dto.targetAge,
@@ -111,6 +132,7 @@ export const mapBackendSpotDetailToSpotDetail = (
     indoor: !!dto.indoor,
   };
 };
+
 
 // ---------------------------------------------
 // 一覧API：GET /spots
@@ -145,6 +167,7 @@ export const fetchSpots = async (filter?: Partial<FilterState>): Promise<Spot[]>
   const data: BackendSpotDto[] = await res.json();
   return data.map(mapBackendSpotToSpot);
 };
+
 
 // ---------------------------------------------
 // 詳細API：GET /spots/{id}
