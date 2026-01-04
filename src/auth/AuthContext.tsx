@@ -1,11 +1,20 @@
+/* eslint-disable react-refresh/only-export-components */
 // src/auth/AuthContext.tsx
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+} from "react";
+import type { ReactNode } from "react";
 import { authStorage } from "./storage";
 import { fetchMeApi, loginApi, type MeResponse } from "../api/auth";
 import { ApiError } from "../api/client";
 
 type AuthState = {
-  isReady: boolean; // 起動時に token復元を試みたか
+  isReady: boolean;
   user: MeResponse | null;
   token: string | null;
 };
@@ -18,61 +27,61 @@ type AuthContextValue = AuthState & {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [state, setState] = useState<AuthState>({
-    isReady: false,
+const initAuthState = (): AuthState => {
+  const token = authStorage.getToken();
+  return {
+    isReady: token ? false : true,
     user: null,
-    token: authStorage.getToken(),
-  });
-
-  const logout = () => {
-    authStorage.clearToken();
-    setState((prev) => ({ ...prev, user: null, token: null }));
+    token,
   };
+};
 
-  const refreshMe = async () => {
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const [state, setState] = useState<AuthState>(() => initAuthState());
+
+  const logout = useCallback(() => {
+    authStorage.clearToken();
+    setState({ isReady: true, user: null, token: null });
+  }, []);
+
+  const refreshMe = useCallback(async () => {
     const token = authStorage.getToken();
     if (!token) {
-      setState((prev) => ({ ...prev, user: null, token: null, isReady: true }));
+      setState({ isReady: true, user: null, token: null });
       return;
     }
 
     try {
       const me = await fetchMeApi();
-      setState((prev) => ({
-        ...prev,
-        user: me,
-        token,
-        isReady: true,
-      }));
-    } catch (e) {
-      // tokenが失効/不正 → クリア
+      setState({ isReady: true, user: me, token });
+    } catch (e: unknown) {
       if (e instanceof ApiError && e.status === 401) {
         logout();
+        return;
       }
       setState((prev) => ({ ...prev, isReady: true }));
     }
-  };
+  }, [logout]);
 
-  const login = async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string) => {
     const res = await loginApi({ email, password });
     authStorage.setToken(res.accessToken);
+
     setState({
       isReady: true,
       user: res.user,
       token: res.accessToken,
     });
-  };
-
-  useEffect(() => {
-    // 起動時：tokenがあれば /auth/me で復元
-    refreshMe();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  if (!state.isReady && state.token) {
+    setState((prev) => ({ ...prev, isReady: true }));
+    void refreshMe();
+  }
 
   const value = useMemo<AuthContextValue>(
     () => ({ ...state, login, logout, refreshMe }),
-    [state]
+    [state, login, logout, refreshMe]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

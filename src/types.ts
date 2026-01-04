@@ -1,5 +1,57 @@
-// Spot（フロントが扱うスポット情報）
-// バックエンドの SpotListItemDto と完全一致
+// src/types.ts
+
+// ----------------------------
+// 共通：APIエラー型（フロント用）
+// ----------------------------
+export type ErrorCode =
+  | "AUTHENTICATION_REQUIRED"
+  | "ACCESS_DENIED"
+  | "VALIDATION_ERROR"
+  | "RESOURCE_NOT_FOUND"
+  | "CONFLICT"
+  | "INTERNAL_ERROR"
+  | string;
+
+export interface ApiErrorResponse {
+  errorCode: ErrorCode;
+  message: string;
+}
+
+// fetch側でthrowする用途（UIで判定できるように）
+export class ApiError extends Error {
+  public readonly status: number;
+  public readonly errorCode: ErrorCode;
+
+  constructor(params: { status: number; errorCode: ErrorCode; message: string }) {
+    super(params.message);
+    this.name = "ApiError";
+    this.status = params.status;
+    this.errorCode = params.errorCode;
+  }
+}
+
+// ----------------------------
+// 認証（フロント用）
+// ----------------------------
+export interface AuthUser {
+  id: number;
+  name: string;
+  email: string;
+  role: "GUEST" | "USER" | "ADMIN" | string;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  token: string;
+}
+
+// ----------------------------
+// Spot（一覧）
+// ----------------------------
 export interface Spot {
   id: number;
   name: string;
@@ -20,16 +72,18 @@ export interface Spot {
   indoor: boolean;
 }
 
-
-// フィルター用
-// SpotController の @RequestParam と対応（Enumは「Enum名」で送る）
+// ----------------------------
+// 検索条件（フィルタ）
+// ----------------------------
 export type PriceType = "FREE" | "UNDER_1000" | "UNDER_2000" | "OVER_2000";
+
 export type AgeGroup =
   | "ALL"
   | "PRESCHOOL"
   | "ELE_LOW"
   | "ELE_HIGH"
   | "JUNIOR_HIGH";
+
 export type FacilityKey =
   | "diaper"
   | "stroller"
@@ -38,50 +92,25 @@ export type FacilityKey =
   | "water"
   | "indoor";
 
-
-// レビュー投稿用（バックエンドの ChildAgeGroup enum 名に合わせる）
-export type ChildAgeGroup =
-  | "PRESCHOOL"
-  | "ELE_LOW"
-  | "ELE_HIGH"
-  | "JUNIOR_HIGH_PLUS";
-
-
-// レビュー投稿（Create）リクエスト型（バックエンドの ReviewCreateRequest 相当）
-export interface ReviewCreateRequest {
-  childAgeGroup: ChildAgeGroup; // 必須
-  rating: number; // 必須（1〜5）
-  ratingCost?: number | null; // 任意（1〜5）
-  crowdLevel?: number | null; // 任意（1〜5）
-  toiletCleanliness?: number | null; // 任意（1〜5）
-  strollerEase?: number | null; // 任意（1〜5）
-  reviewText: string; // 必須
-  costTotal?: number | null; // 任意
+export interface FilterState {
+  keyword: string;
+  categoryIds: number[];
+  price: PriceType[];
+  age: AgeGroup[];
+  facilities: FacilityKey[];
 }
 
-
-// カテゴリ（フロントが扱うカテゴリ情報）
-// バックエンドの CategoryDto と完全一致
+// ----------------------------
+// Category（一覧）
+// ----------------------------
 export interface Category {
   id: number;
   name: string;
 }
 
-
-// 検索条件（フロントが保持する状態）
-// バックエンドの検索条件（SpotSearchCondition / RequestParam）と対応
-export interface FilterState {
-  keyword: string;
-  categoryIds: number[]; // 例）categoryIds=1&categoryIds=3
-  price: PriceType[]; // 例）price=FREE&price=UNDER_1000
-  age: AgeGroup[]; // 例）age=PRESCHOOL&age=ELE_LOW
-  facilities: FacilityKey[]; // 例）facilities=diaper&facilities=indoor
-}
-
-
-// SpotDetail（フロントが扱うスポット詳細）
-// バックエンドの SpotDetailDto と完全一致
-
+// ----------------------------
+// SpotDetail（詳細）
+// ----------------------------
 export interface SpotDetail {
   id: number;
   name: string;
@@ -111,16 +140,75 @@ export interface SpotDetail {
   indoor: boolean;
 }
 
+// ----------------------------
+// Review（子どもの年齢帯）
+// ----------------------------
+export type ChildAgeGroup =
+  | "PRESCHOOL"
+  | "ELE_LOW"
+  | "ELE_HIGH"
+  | "JUNIOR_HIGH_PLUS";
 
-// ReviewListItem（フロントが扱うレビュー一覧の1件）
-// バックエンドの ReviewListItemDto と完全一致
+// ----------------------------
+// Review Create（投稿）
+// ----------------------------
+export interface ReviewCreateRequest {
+  childAgeGroup: ChildAgeGroup;
+  rating: number;
+  ratingCost?: number | null;
+  crowdLevel?: number | null;
+  toiletCleanliness?: number | null;
+  strollerEase?: number | null;
+  reviewText: string;
+  costTotal?: number | null;
+}
 
+// ✅ 追加：Review Upsert（投稿/更新 共通）
+// reviews.ts がこれを import しているため必須
+export interface ReviewUpsertRequest {
+  childAgeGroup: ChildAgeGroup;
+  rating: number;
+  ratingCost?: number | null;
+  crowdLevel?: number | null;
+  toiletCleanliness?: number | null;
+  strollerEase?: number | null;
+  reviewText: string;
+  costTotal?: number | null;
+}
+
+// ----------------------------
+// Review Update（更新）
+// ----------------------------
+export interface ReviewUpdateRequest {
+  childAgeGroup: ChildAgeGroup;
+  rating: number;
+  ratingCost?: number | null;
+  crowdLevel?: number | null;
+  toiletCleanliness?: number | null;
+  strollerEase?: number | null;
+  reviewText: string;
+  costTotal?: number | null;
+}
+
+// ----------------------------
+// ReviewListItem（一覧1件）
+// ----------------------------
 export interface ReviewListItem {
   id: number;
   spotId: number;
   userId: number;
   userName: string;
+
   rating: number;
   reviewText: string;
-  createdAt: string; // バックエンドの LocalDateTime を ISO 文字列で受け取る想定
+  createdAt: string;
+
+  childAgeGroup?: ChildAgeGroup | null;
+  ratingCost?: number | null;
+  crowdLevel?: number | null;
+  toiletCleanliness?: number | null;
+  strollerEase?: number | null;
+  costTotal?: number | null;
+
+  isMine?: boolean;
 }

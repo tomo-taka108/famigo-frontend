@@ -1,14 +1,27 @@
 // src/auth/storage.ts
 const TOKEN_KEY = "famigo_access_token";
 
+// ✅ client.ts が `import { getToken } ...` しているので必須
+export const getToken = (): string | null => {
+  return localStorage.getItem(TOKEN_KEY);
+};
+
+export const setToken = (token: string) => {
+  localStorage.setItem(TOKEN_KEY, token);
+};
+
+export const clearToken = () => {
+  localStorage.removeItem(TOKEN_KEY);
+};
+
 export const authStorage = {
   getToken(): string | null {
-    return localStorage.getItem(TOKEN_KEY);
+    return getToken();
   },
   setToken(token: string) {
-    localStorage.setItem(TOKEN_KEY, token);
+    setToken(token);
   },
   clearToken() {
-    localStorage.removeItem(TOKEN_KEY);
+    clearToken();
   },
 };

@@ -1,107 +1,78 @@
 // src/api/client.ts
-import { authStorage } from "../auth/storage";
+import { ApiError, type ApiErrorResponse } from "../types";
+import { getToken } from "../auth/storage";
 
-export const BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
+// ✅ 他ファイルが `../api/client` から import している前提があるので再export
+export { ApiError } from "../types";
+export type { ApiErrorResponse } from "../types";
 
-export type ErrorResponse = {
-  errorCode: string;
-  message: string;
+const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
+
+const isJsonResponse = (res: Response) => {
+  const ct = res.headers.get("content-type") ?? "";
+  return ct.includes("application/json");
 };
 
-export class ApiError extends Error {
-  status: number;
-  errorCode?: string;
+const safeReadJson = async <T>(res: Response): Promise<T | null> => {
+  if (res.status === 204 || res.status === 205) return null;
 
-  constructor(args: { status: number; message: string; errorCode?: string }) {
-    super(args.message);
-    this.name = "ApiError";
-    this.status = args.status;
-    this.errorCode = args.errorCode;
-  }
-}
+  const len = res.headers.get("content-length");
+  if (len === "0") return null;
 
-type ApiFetchOptions = RequestInit & {
-  // true の場合のみ、tokenが無いなら即401扱い（ページガード用）
-  requireAuth?: boolean;
+  if (!isJsonResponse(res)) return null;
+
+  const txt = await res.text();
+  if (txt.trim() === "") return null;
+
+  return JSON.parse(txt) as T;
 };
 
-const tryParseError = async (res: Response): Promise<ErrorResponse | null> => {
-  const contentType = res.headers.get("content-type") ?? "";
-  if (!contentType.includes("application/json")) return null;
-
-  try {
-    const data = (await res.json()) as unknown;
-    if (
-      data &&
-      typeof data === "object" &&
-      "errorCode" in data &&
-      "message" in data
-    ) {
-      const d = data as { errorCode?: unknown; message?: unknown };
-      if (typeof d.errorCode === "string" && typeof d.message === "string") {
-        return { errorCode: d.errorCode, message: d.message };
-      }
-    }
-    return null;
-  } catch {
-    return null;
-  }
-};
-
-export const apiFetch = async <T>(
+export async function apiFetch<T>(
   path: string,
-  options: ApiFetchOptions = {}
-): Promise<T> => {
-  const token = authStorage.getToken();
+  init?: RequestInit & {
+    /** ✅ 新：こちらを使う（favorites / reviews / auth(me) がこれ） */
+    requireAuth?: boolean;
+    /** ✅ 旧互換：残しておく（既存が auth を使ってても動く） */
+    auth?: boolean;
+  }
+): Promise<T> {
+  const url = path.startsWith("http") ? path : `${BASE_URL}${path}`;
 
-  if (options.requireAuth && !token) {
-    throw new ApiError({
-      status: 401,
-      errorCode: "AUTH_REQUIRED",
-      message: "Authentication required: missing Bearer token.",
-    });
+  const headers = new Headers(init?.headers);
+
+  if (init?.body && !headers.has("content-type")) {
+    headers.set("content-type", "application/json");
   }
 
-  const headers = new Headers(options.headers);
-
-  // JSON送信時のデフォルト
-  if (!headers.has("Content-Type") && options.body) {
-    headers.set("Content-Type", "application/json");
+  // ✅ requireAuth / auth が true なら Authorization を付与
+  const needAuth = init?.requireAuth ?? init?.auth ?? false;
+  if (needAuth) {
+    const token = getToken();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
   }
 
-  // token がある時だけ Authorization を付ける（公開APIでも isFavorite が返せる）
-  if (token && !headers.has("Authorization")) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  const res = await fetch(url, { ...init, headers });
 
   if (!res.ok) {
-    const errJson = await tryParseError(res);
-    if (errJson) {
+    const err = await safeReadJson<ApiErrorResponse>(res);
+
+    if (err?.errorCode) {
       throw new ApiError({
         status: res.status,
-        errorCode: errJson.errorCode,
-        message: errJson.message,
+        errorCode: err.errorCode,
+        message: err.message,
       });
     }
 
-    // JSONじゃない/読めない場合のフォールバック
-    const text = await res.text().catch(() => "");
     throw new ApiError({
       status: res.status,
-      message: text || `Request failed: ${res.status}`,
+      errorCode: "INTERNAL_ERROR",
+      message: `Request failed: ${res.status}`,
     });
   }
 
-  // No Content
-  if (res.status === 204) {
-    return undefined as T;
-  }
-
-  return (await res.json()) as T;
-};
+  const data = await safeReadJson<T>(res);
+  return data as T;
+}
