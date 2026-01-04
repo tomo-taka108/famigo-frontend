@@ -1,38 +1,29 @@
-const BASE_URL = "http://localhost:8080";
-
+// src/api/favorites.ts
 import type { Spot } from "../types";
+import { apiFetch } from "./client";
 import { mapBackendSpotToSpot, type BackendSpotDto } from "./spots";
 
-// お気に入り一覧：GET /favorites
+// お気に入り一覧：GET /favorites（要ログイン）
 export const fetchFavorites = async (): Promise<Spot[]> => {
-  const res = await fetch(`${BASE_URL}/favorites`);
-
-  if (!res.ok) {
-    throw new Error(`Failed to fetch favorites: ${res.status}`);
-  }
-
-  const data = (await res.json()) as BackendSpotDto[];
+  const data = await apiFetch<BackendSpotDto[]>("/favorites", {
+    method: "GET",
+    requireAuth: true,
+  });
   return data.map(mapBackendSpotToSpot);
 };
 
-// お気に入り登録：POST /spots/{spotId}/favorites
+// お気に入り登録：POST /spots/{spotId}/favorites（要ログイン）
 export const addFavorite = async (spotId: number): Promise<void> => {
-  const res = await fetch(`${BASE_URL}/spots/${spotId}/favorites`, {
+  await apiFetch<void>(`/spots/${spotId}/favorites`, {
     method: "POST",
+    requireAuth: true,
   });
-
-  if (!res.ok) {
-    throw new Error(`Failed to add favorite: ${res.status}`);
-  }
 };
 
-// お気に入り解除：DELETE /spots/{spotId}/favorites
+// お気に入り解除：DELETE /spots/{spotId}/favorites（要ログイン）
 export const removeFavorite = async (spotId: number): Promise<void> => {
-  const res = await fetch(`${BASE_URL}/spots/${spotId}/favorites`, {
+  await apiFetch<void>(`/spots/${spotId}/favorites`, {
     method: "DELETE",
+    requireAuth: true,
   });
-
-  if (!res.ok) {
-    throw new Error(`Failed to remove favorite: ${res.status}`);
-  }
 };

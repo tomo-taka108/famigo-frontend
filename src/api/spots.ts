@@ -1,9 +1,5 @@
 import type { Spot, SpotDetail, FilterState } from "../types";
-
-// ---------------------------------------------
-// 共通の API ベースURL
-// ---------------------------------------------
-const BASE_URL = "http://localhost:8080";
+import { apiFetch } from "./client";
 
 // ---------------------------------------------
 // 0/1/true/false/null を安全に boolean にする
@@ -15,128 +11,116 @@ const toBool = (v: unknown): boolean => {
   return false;
 };
 
-
 // ---------------------------------------------
-// Spot 一覧用 DTO（バックエンド → フロント）
-// ※バックエンド：SpotListItemDto と対応
+// バックエンドDTO（一覧）
 // ---------------------------------------------
-export interface BackendSpotDto {
+export type BackendSpotDto = {
   id: number;
   name: string;
   address: string;
-  area: string;
-  priceType: string;
-  categoryName: string;
-  targetAge: string;
+  priceType: string; // "FREE" | "LOW" | "MID" | "HIGH"
+  ratingAvg: number | null;
+  reviewCount: number;
+  isFavorite?: boolean; // ログイン時だけ true/false、未ログイン時は無い可能性
+  categoryNames?: string[];
+  facilities?: Record<string, unknown>;
+};
+
+// ---------------------------------------------
+// バックエンドDTO（詳細）
+// ---------------------------------------------
+export type BackendSpotDetailDto = {
+  id: number;
+  name: string;
+  address: string;
+  description: string | null;
+  officialUrl: string | null;
   googleMapUrl: string | null;
+  priceType: string; // "FREE" | "LOW" | "MID" | "HIGH"
+  ratingAvg: number | null;
+  reviewCount: number;
+  isFavorite?: boolean;
+  categoryNames?: string[];
+  facilities?: Record<string, unknown>;
+};
 
-  isFavorite: boolean | number | null;
+// ---------------------------------------------
+// priceType をフロントの priceCategory に変換
+// ---------------------------------------------
+const mapPriceTypeToPriceCategory = (priceType: string): Spot["priceCategory"] => {
+  switch (priceType) {
+    case "FREE":
+      return "free";
+    case "LOW":
+      return "1000";
+    case "MID":
+      return "2000";
+    case "HIGH":
+      return "paid";
+    default:
+      return "paid";
+  }
+};
 
-  // 注意：LEFT JOIN のため null の可能性あり（Boolean → null）
-  diaperChanging: boolean | null;
-  strollerOk: boolean | null;
-  playground: boolean | null;
-  athletics: boolean | null;
-  waterPlay: boolean | null;
-  indoor: boolean | null;
-}
+// ---------------------------------------------
+// facilities を Spot.facilities に変換
+// （バックエンドは map 形式になってる想定）
+// ---------------------------------------------
+const mapFacilities = (facilities?: Record<string, unknown>): Spot["facilities"] => {
+  return {
+    toilet: toBool(facilities?.toilet),
+    parking: toBool(facilities?.parking),
+    diaper: toBool(facilities?.diaper),
+    indoor: toBool(facilities?.indoor),
+    water: toBool(facilities?.water),
+    largePlayground: toBool(facilities?.largePlayground),
+    stroller: toBool(facilities?.stroller),
+  };
+};
 
-// Spot 一覧：BackendSpotDto → Spot 変換
+// ---------------------------------------------
+// BackendSpotDto → Spot
+// ---------------------------------------------
 export const mapBackendSpotToSpot = (dto: BackendSpotDto): Spot => {
   return {
-    id: dto.id,
+    id: String(dto.id),
     name: dto.name,
     address: dto.address,
-    area: dto.area,
-    priceType: dto.priceType,
-    categoryName: dto.categoryName,
-    targetAge: dto.targetAge,
-    googleMapUrl: dto.googleMapUrl,
-
-    isFavorite: toBool(dto.isFavorite),
-
-    diaperChanging: !!dto.diaperChanging,
-    strollerOk: !!dto.strollerOk,
-    playground: !!dto.playground,
-    athletics: !!dto.athletics,
-    waterPlay: !!dto.waterPlay,
-    indoor: !!dto.indoor,
+    rating: dto.ratingAvg ?? 0,
+    reviewCount: dto.reviewCount,
+    image: "", // 画像は現状未実装
+    tags: dto.categoryNames ?? [],
+    priceCategory: mapPriceTypeToPriceCategory(dto.priceType),
+    facilities: mapFacilities(dto.facilities),
+    isFavorite: dto.isFavorite ?? false,
   };
 };
 
-
 // ---------------------------------------------
-// Spot詳細用 DTO（バックエンド → フロント）
-// ※バックエンド：SpotDetailDto と対応
+// BackendSpotDetailDto → SpotDetail
 // ---------------------------------------------
-export interface BackendSpotDetailDto {
-  id: number;
-  name: string;
-  address: string;
-  area: string;
-  priceType: string;
-  categoryName: string;
-
-  isFavorite: boolean | number | null;
-
-  parkingInfo: string | null;
-  toiletInfo: string | null;
-  targetAge: string | null;
-  stayingTime: string | null;
-  convenienceStore: string | null;
-  restaurantInfo: string | null;
-  googleMapUrl: string | null;
-  closedDays: string | null;
-  officialUrl: string | null;
-  notes: string | null;
-
-  // 注意：LEFT JOIN のため null の可能性あり（Boolean → null）
-  diaperChanging: boolean | null;
-  strollerOk: boolean | null;
-  playground: boolean | null;
-  athletics: boolean | null;
-  waterPlay: boolean | null;
-  indoor: boolean | null;
-}
-
-// Spot詳細：BackendSpotDetailDto → SpotDetail 変換
-export const mapBackendSpotDetailToSpotDetail = (
-  dto: BackendSpotDetailDto
-): SpotDetail => {
+export const mapBackendSpotDetailToSpotDetail = (dto: BackendSpotDetailDto): SpotDetail => {
   return {
-    id: dto.id,
+    id: String(dto.id),
     name: dto.name,
     address: dto.address,
-    area: dto.area,
-    priceType: dto.priceType,
-    categoryName: dto.categoryName,
+    rating: dto.ratingAvg ?? 0,
+    reviewCount: dto.reviewCount,
+    image: "",
+    tags: dto.categoryNames ?? [],
+    priceCategory: mapPriceTypeToPriceCategory(dto.priceType),
+    facilities: mapFacilities(dto.facilities),
+    isFavorite: dto.isFavorite ?? false,
 
-    isFavorite: toBool(dto.isFavorite),
-
-    parkingInfo: dto.parkingInfo,
-    toiletInfo: dto.toiletInfo,
-    targetAge: dto.targetAge,
-    stayingTime: dto.stayingTime,
-    convenienceStore: dto.convenienceStore,
-    restaurantInfo: dto.restaurantInfo,
-    googleMapUrl: dto.googleMapUrl,
-    closedDays: dto.closedDays,
-    officialUrl: dto.officialUrl,
-    notes: dto.notes,
-
-    diaperChanging: !!dto.diaperChanging,
-    strollerOk: !!dto.strollerOk,
-    playground: !!dto.playground,
-    athletics: !!dto.athletics,
-    waterPlay: !!dto.waterPlay,
-    indoor: !!dto.indoor,
+    // detail fields
+    description: dto.description ?? "",
+    officialUrl: dto.officialUrl ?? "",
+    googleMapUrl: dto.googleMapUrl ?? "",
   };
 };
 
-
 // ---------------------------------------------
-// 一覧API：GET /spots
-// 検索条件あり：GET /spots?keyword=...&categoryIds=...&price=...&age=...&facilities=...
+// 一覧API：GET /spots（検索条件あり：GET /spots?keyword=...&categoryIds=...&price=...&age=...&facilities=...）
 // ---------------------------------------------
 export const fetchSpots = async (filter?: Partial<FilterState>): Promise<Spot[]> => {
   const qs = new URLSearchParams();
@@ -156,29 +140,25 @@ export const fetchSpots = async (filter?: Partial<FilterState>): Promise<Spot[]>
   // facilities（複数指定可）
   filter?.facilities?.forEach((f) => qs.append("facilities", f));
 
-  const url = qs.toString() ? `${BASE_URL}/spots?${qs.toString()}` : `${BASE_URL}/spots`;
+  // クエリがある時だけ /spots?...
+  const path = qs.toString() ? `/spots?${qs.toString()}` : `/spots`;
 
-  const res = await fetch(url);
+  // ✅ apiFetch を使う（tokenがある時は Authorization が付く → isFavorite 等が返せる）
+  const data: BackendSpotDto[] = await apiFetch<BackendSpotDto[]>(path, {
+    method: "GET",
+  });
 
-  if (!res.ok) {
-    throw new Error(`Failed to fetch spots: ${res.status}`);
-  }
-
-  const data: BackendSpotDto[] = await res.json();
   return data.map(mapBackendSpotToSpot);
 };
-
 
 // ---------------------------------------------
 // 詳細API：GET /spots/{id}
 // ---------------------------------------------
 export const fetchSpotDetail = async (id: number): Promise<SpotDetail> => {
-  const res = await fetch(`${BASE_URL}/spots/${id}`);
+  // ✅ apiFetch を使う（tokenがある時は Authorization が付く → isFavorite 等が返せる）
+  const data: BackendSpotDetailDto = await apiFetch<BackendSpotDetailDto>(`/spots/${id}`, {
+    method: "GET",
+  });
 
-  if (!res.ok) {
-    throw new Error(`Failed to fetch spot detail: ${res.status}`);
-  }
-
-  const data: BackendSpotDetailDto = await res.json();
   return mapBackendSpotDetailToSpotDetail(data);
 };
