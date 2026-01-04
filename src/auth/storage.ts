@@ -1,3 +1,4 @@
+// src/auth/storage.ts
 const TOKEN_KEY = "famigo_access_token";
 
 export const authStorage = {
