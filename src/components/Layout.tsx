@@ -1,63 +1,86 @@
-import { Outlet, NavLink } from "react-router-dom";
+// src/components/Layout.tsx
+import { Link, Outlet, useNavigate } from "react-router-dom";
 import { Footer } from "./Footer";
+import { useAuth } from "../auth/AuthContext";
 
 export default function Layout() {
+  const auth = useAuth();
+  const navigate = useNavigate();
+
+  const isLoggedIn = !!auth.token && !!auth.user;
+
+  const goFavorites = () => {
+    if (!isLoggedIn) {
+      navigate("/login", { state: { from: "/favorites" } });
+      return;
+    }
+    navigate("/favorites");
+  };
+
   return (
-    <div className="min-h-screen text-gray-900 bg-linear-to-b from-emerald-50/70 via-white to-white">
-      <div className="mx-auto w-full max-w-7xl px-4 md:px-6">
-        <div className="flex min-h-screen flex-col">
-          {/* 共通ヘッダー */}
-          <header className="py-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-2xl bg-emerald-700 text-white flex items-center justify-center font-extrabold shadow-sm">
-                  F
-                </div>
-
-                <div>
-                  <div className="text-xl md:text-2xl font-extrabold leading-tight tracking-tight">
-                    Famigo
-                  </div>
-                  <div className="text-xs md:text-sm text-gray-500">
-                    家族のおでかけ検索
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="hidden sm:block text-sm text-gray-500">
-                  低コストで、家族の思い出を
-                </div>
-
-                <NavLink
-                  to="/favorites"
-                  className={({ isActive }) =>
-                    `
-                      inline-flex items-center justify-center
-                      rounded-xl border px-4 py-2 text-sm font-semibold
-                      shadow-sm transition
-                      focus:outline-none focus:ring-2 focus:ring-emerald-200
-                      ${
-                        isActive
-                          ? "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
-                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                      }
-                    `
-                  }
-                >
-                  お気に入り
-                </NavLink>
+    <div className="min-h-dvh flex flex-col bg-white">
+      <header className="border-b">
+        <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-emerald-600 text-white flex items-center justify-center font-extrabold">
+              F
+            </div>
+            <div>
+              <div className="text-xl font-extrabold text-slate-900">Famigo</div>
+              <div className="text-xs text-slate-500">
+                家族のおでかけ検索 / 低コストで、家族の思い出を
               </div>
             </div>
-          </header>
+          </Link>
 
-          <main className="flex-1 pb-16">
-            <Outlet />
-          </main>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={goFavorites}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              お気に入り
+            </button>
 
-          <Footer />
+            {!isLoggedIn ? (
+              <Link
+                to="/login"
+                className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
+              >
+                ログイン
+              </Link>
+            ) : (
+              <>
+                <div className="hidden sm:flex items-center gap-2 rounded-full bg-slate-50 border border-slate-200 px-3 py-2">
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-emerald-600 text-white text-xs font-bold">
+                    {auth.user?.name?.slice(0, 1) ?? "U"}
+                  </span>
+                  <span className="text-sm font-semibold text-slate-800">
+                    {auth.user?.name}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={auth.logout}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  ログアウト
+                </button>
+              </>
+            )}
+          </div>
         </div>
-      </div>
+      </header>
+
+      {/* ✅ 全ページ共通：左右余白＋最大幅＋固定フッター分の下余白 */}
+      <main className="flex-1 pb-24">
+        <div className="mx-auto w-full max-w-6xl px-4">
+          <Outlet />
+        </div>
+      </main>
+
+      <Footer />
     </div>
   );
 }

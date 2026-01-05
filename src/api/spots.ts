@@ -1,9 +1,6 @@
+// src/api/spots.ts
+import { apiFetch } from "./client";
 import type { Spot, SpotDetail, FilterState } from "../types";
-
-// ---------------------------------------------
-// 共通の API ベースURL
-// ---------------------------------------------
-const BASE_URL = "http://localhost:8080";
 
 // ---------------------------------------------
 // 0/1/true/false/null を安全に boolean にする
@@ -15,10 +12,9 @@ const toBool = (v: unknown): boolean => {
   return false;
 };
 
-
 // ---------------------------------------------
 // Spot 一覧用 DTO（バックエンド → フロント）
-// ※バックエンド：SpotListItemDto と対応
+// SpotListItemDto と対応
 // ---------------------------------------------
 export interface BackendSpotDto {
   id: number;
@@ -32,7 +28,6 @@ export interface BackendSpotDto {
 
   isFavorite: boolean | number | null;
 
-  // 注意：LEFT JOIN のため null の可能性あり（Boolean → null）
   diaperChanging: boolean | null;
   strollerOk: boolean | null;
   playground: boolean | null;
@@ -41,33 +36,29 @@ export interface BackendSpotDto {
   indoor: boolean | null;
 }
 
-// Spot 一覧：BackendSpotDto → Spot 変換
-export const mapBackendSpotToSpot = (dto: BackendSpotDto): Spot => {
-  return {
-    id: dto.id,
-    name: dto.name,
-    address: dto.address,
-    area: dto.area,
-    priceType: dto.priceType,
-    categoryName: dto.categoryName,
-    targetAge: dto.targetAge,
-    googleMapUrl: dto.googleMapUrl,
+export const mapBackendSpotToSpot = (dto: BackendSpotDto): Spot => ({
+  id: dto.id,
+  name: dto.name,
+  address: dto.address,
+  area: dto.area,
+  priceType: dto.priceType,
+  categoryName: dto.categoryName,
+  targetAge: dto.targetAge,
+  googleMapUrl: dto.googleMapUrl,
 
-    isFavorite: toBool(dto.isFavorite),
+  isFavorite: toBool(dto.isFavorite),
 
-    diaperChanging: !!dto.diaperChanging,
-    strollerOk: !!dto.strollerOk,
-    playground: !!dto.playground,
-    athletics: !!dto.athletics,
-    waterPlay: !!dto.waterPlay,
-    indoor: !!dto.indoor,
-  };
-};
-
+  diaperChanging: !!dto.diaperChanging,
+  strollerOk: !!dto.strollerOk,
+  playground: !!dto.playground,
+  athletics: !!dto.athletics,
+  waterPlay: !!dto.waterPlay,
+  indoor: !!dto.indoor,
+});
 
 // ---------------------------------------------
-// Spot詳細用 DTO（バックエンド → フロント）
-// ※バックエンド：SpotDetailDto と対応
+// Spot 詳細用 DTO（バックエンド → フロント）
+// SpotDetailDto と対応
 // ---------------------------------------------
 export interface BackendSpotDetailDto {
   id: number;
@@ -90,7 +81,6 @@ export interface BackendSpotDetailDto {
   officialUrl: string | null;
   notes: string | null;
 
-  // 注意：LEFT JOIN のため null の可能性あり（Boolean → null）
   diaperChanging: boolean | null;
   strollerOk: boolean | null;
   playground: boolean | null;
@@ -99,86 +89,65 @@ export interface BackendSpotDetailDto {
   indoor: boolean | null;
 }
 
-// Spot詳細：BackendSpotDetailDto → SpotDetail 変換
-export const mapBackendSpotDetailToSpotDetail = (
-  dto: BackendSpotDetailDto
-): SpotDetail => {
-  return {
-    id: dto.id,
-    name: dto.name,
-    address: dto.address,
-    area: dto.area,
-    priceType: dto.priceType,
-    categoryName: dto.categoryName,
+export const mapBackendSpotDetailToSpotDetail = (dto: BackendSpotDetailDto): SpotDetail => ({
+  id: dto.id,
+  name: dto.name,
+  address: dto.address,
+  area: dto.area,
+  priceType: dto.priceType,
+  categoryName: dto.categoryName,
 
-    isFavorite: toBool(dto.isFavorite),
+  isFavorite: toBool(dto.isFavorite),
 
-    parkingInfo: dto.parkingInfo,
-    toiletInfo: dto.toiletInfo,
-    targetAge: dto.targetAge,
-    stayingTime: dto.stayingTime,
-    convenienceStore: dto.convenienceStore,
-    restaurantInfo: dto.restaurantInfo,
-    googleMapUrl: dto.googleMapUrl,
-    closedDays: dto.closedDays,
-    officialUrl: dto.officialUrl,
-    notes: dto.notes,
+  parkingInfo: dto.parkingInfo,
+  toiletInfo: dto.toiletInfo,
+  targetAge: dto.targetAge,
+  stayingTime: dto.stayingTime,
+  convenienceStore: dto.convenienceStore,
+  restaurantInfo: dto.restaurantInfo,
+  googleMapUrl: dto.googleMapUrl,
+  closedDays: dto.closedDays,
+  officialUrl: dto.officialUrl,
+  notes: dto.notes,
 
-    diaperChanging: !!dto.diaperChanging,
-    strollerOk: !!dto.strollerOk,
-    playground: !!dto.playground,
-    athletics: !!dto.athletics,
-    waterPlay: !!dto.waterPlay,
-    indoor: !!dto.indoor,
-  };
-};
-
+  diaperChanging: !!dto.diaperChanging,
+  strollerOk: !!dto.strollerOk,
+  playground: !!dto.playground,
+  athletics: !!dto.athletics,
+  waterPlay: !!dto.waterPlay,
+  indoor: !!dto.indoor,
+});
 
 // ---------------------------------------------
 // 一覧API：GET /spots
-// 検索条件あり：GET /spots?keyword=...&categoryIds=...&price=...&age=...&facilities=...
+// ※ isFavorite を返したいなら auth:true が必要（バックが認証必須化している場合）
 // ---------------------------------------------
 export const fetchSpots = async (filter?: Partial<FilterState>): Promise<Spot[]> => {
   const qs = new URLSearchParams();
 
-  // keyword（未指定なら送らない）
   if (filter?.keyword && filter.keyword.trim() !== "") {
     qs.append("keyword", filter.keyword.trim());
   }
 
-  // categoryIds（複数指定可）
   filter?.categoryIds?.forEach((id) => qs.append("categoryIds", String(id)));
-
-  // price / age は Enum名を送る
   filter?.price?.forEach((p) => qs.append("price", p));
   filter?.age?.forEach((a) => qs.append("age", a));
-
-  // facilities（複数指定可）
   filter?.facilities?.forEach((f) => qs.append("facilities", f));
 
-  const url = qs.toString() ? `${BASE_URL}/spots?${qs.toString()}` : `${BASE_URL}/spots`;
+  const path = qs.toString() ? `/spots?${qs.toString()}` : `/spots`;
 
-  const res = await fetch(url);
+  // ✅ ここがポイント：
+  // backendが「スポット一覧でも isFavorite を出すために認証必須」にしている場合、
+  // auth:true を付けるとログイン時だけBearerが載る（未ログインでもtokenが無ければ付かない）
+  const data = await apiFetch<BackendSpotDto[]>(path, { method: "GET", auth: true });
 
-  if (!res.ok) {
-    throw new Error(`Failed to fetch spots: ${res.status}`);
-  }
-
-  const data: BackendSpotDto[] = await res.json();
   return data.map(mapBackendSpotToSpot);
 };
-
 
 // ---------------------------------------------
 // 詳細API：GET /spots/{id}
 // ---------------------------------------------
 export const fetchSpotDetail = async (id: number): Promise<SpotDetail> => {
-  const res = await fetch(`${BASE_URL}/spots/${id}`);
-
-  if (!res.ok) {
-    throw new Error(`Failed to fetch spot detail: ${res.status}`);
-  }
-
-  const data: BackendSpotDetailDto = await res.json();
+  const data = await apiFetch<BackendSpotDetailDto>(`/spots/${id}`, { method: "GET", auth: true });
   return mapBackendSpotDetailToSpotDetail(data);
 };

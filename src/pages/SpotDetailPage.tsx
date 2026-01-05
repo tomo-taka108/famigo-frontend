@@ -1,7 +1,12 @@
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { fetchSpotDetail } from "../api/spots";
-import { createReview, fetchReviewsBySpotId } from "../api/reviews";
+import {
+  createReview,
+  deleteReview,
+  fetchReviewsBySpotId,
+  updateReview,
+} from "../api/reviews";
 import { addFavorite, removeFavorite } from "../api/favorites";
 import type {
   ChildAgeGroup,
@@ -9,8 +14,17 @@ import type {
   ReviewListItem,
   SpotDetail,
 } from "../types";
+import { useAuth } from "../auth/AuthContext";
+import { ApiError } from "../api/client";
 
 function getErrorMessage(e: unknown, fallback: string) {
+  if (e instanceof ApiError) {
+    if (e.errorCode === "AUTHENTICATION_REQUIRED") return "ログインが必要です。";
+    if (e.errorCode === "ACCESS_DENIED") return "権限がありません。";
+    if (e.errorCode === "VALIDATION_ERROR") return "入力内容を確認してください。";
+    return e.message || fallback;
+  }
+
   if (e instanceof Error) return e.message;
   if (typeof e === "string") return e;
   return fallback;
@@ -18,6 +32,10 @@ function getErrorMessage(e: unknown, fallback: string) {
 
 export default function SpotDetailPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const { user, isReady } = useAuth();
 
   const [spot, setSpot] = useState<SpotDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,17 +51,18 @@ export default function SpotDetailPage() {
   // レビュー投稿フォーム（モーダル）
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
 
+  // Create / Edit 切替用
+  const [editingReviewId, setEditingReviewId] = useState<number | null>(null);
+
   const [formRating, setFormRating] = useState<number>(0);
-  const [formChildAgeGroup, setFormChildAgeGroup] = useState<
-    ChildAgeGroup | ""
-  >("");
+  const [formChildAgeGroup, setFormChildAgeGroup] = useState<ChildAgeGroup | "">(
+    ""
+  );
   const [formReviewText, setFormReviewText] = useState<string>("");
 
   const [formRatingCost, setFormRatingCost] = useState<string>("");
   const [formCrowdLevel, setFormCrowdLevel] = useState<string>("");
-  const [formToiletCleanliness, setFormToiletCleanliness] = useState<string>(
-    ""
-  );
+  const [formToiletCleanliness, setFormToiletCleanliness] = useState<string>("");
   const [formStrollerEase, setFormStrollerEase] = useState<string>("");
   const [formCostTotal, setFormCostTotal] = useState<string>("");
 
@@ -64,7 +83,19 @@ export default function SpotDetailPage() {
     []
   );
 
+  const childAgeGroupLabelMap = useMemo(() => {
+    const m = new Map<ChildAgeGroup, string>();
+    childAgeGroupOptions.forEach((o) => m.set(o.value, o.label));
+    return m;
+  }, [childAgeGroupOptions]);
+
   const ratingOptions = useMemo(() => [1, 2, 3, 4, 5], []);
+
+  const isAuthed = isReady && !!user;
+
+  const goLogin = () => {
+    navigate("/login", { state: { from: location.pathname } });
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -198,6 +229,7 @@ export default function SpotDetailPage() {
   };
 
   const resetReviewForm = () => {
+    setEditingReviewId(null);
     setFormRating(0);
     setFormChildAgeGroup("");
     setFormReviewText("");
@@ -211,12 +243,66 @@ export default function SpotDetailPage() {
   };
 
   const openReviewModal = () => {
+    if (!isAuthed) {
+      goLogin();
+      return;
+    }
+
     resetReviewForm();
+    setIsReviewModalOpen(true);
+  };
+
+  const openEditReviewModal = (review: ReviewListItem) => {
+    if (!isAuthed) {
+      goLogin();
+      return;
+    }
+    if (!user || review.userId !== user.id) return;
+
+    setEditingReviewId(review.id);
+
+    // ✅ 既存レビュー値をそのままフォームに復元（年齢帯も含む）
+    setFormRating(review.rating ?? 0);
+    setFormReviewText(review.reviewText ?? "");
+    setFormChildAgeGroup((review.childAgeGroup ?? "") as ChildAgeGroup | "");
+
+    setFormRatingCost(
+      review.ratingCost === null || review.ratingCost === undefined
+        ? ""
+        : String(review.ratingCost)
+    );
+    setFormCrowdLevel(
+      review.crowdLevel === null || review.crowdLevel === undefined
+        ? ""
+        : String(review.crowdLevel)
+    );
+    setFormToiletCleanliness(
+      review.toiletCleanliness === null || review.toiletCleanliness === undefined
+        ? ""
+        : String(review.toiletCleanliness)
+    );
+    setFormStrollerEase(
+      review.strollerEase === null || review.strollerEase === undefined
+        ? ""
+        : String(review.strollerEase)
+    );
+    setFormCostTotal(
+      review.costTotal === null || review.costTotal === undefined
+        ? ""
+        : String(review.costTotal)
+    );
+
+    setSubmitError(null);
+    setSubmitSuccess(null);
     setIsReviewModalOpen(true);
   };
 
   const handleSubmitReview = async () => {
     if (!id) return;
+    if (!isAuthed) {
+      goLogin();
+      return;
+    }
 
     const spotId = Number(id);
 
@@ -254,9 +340,14 @@ export default function SpotDetailPage() {
         costTotal: toNullableNumber(formCostTotal),
       };
 
-      await createReview(spotId, body);
+      if (editingReviewId) {
+        await updateReview(spotId, editingReviewId, body);
+        setSubmitSuccess("レビューを更新しました。");
+      } else {
+        await createReview(spotId, body);
+        setSubmitSuccess("レビューを投稿しました。");
+      }
 
-      setSubmitSuccess("レビューを投稿しました。");
       setShowAllReviews(true);
 
       setIsReviewModalOpen(false);
@@ -264,20 +355,45 @@ export default function SpotDetailPage() {
       await reloadReviews(spotId);
     } catch (e: unknown) {
       console.error(e);
-      setSubmitError(getErrorMessage(e, "レビュー投稿に失敗しました。"));
+      setSubmitError(getErrorMessage(e, "レビュー送信に失敗しました。"));
     } finally {
       setSubmitLoading(false);
     }
   };
 
-  // 詳細ページのお気に入り切替
+  const handleDeleteReview = async (reviewId: number) => {
+    if (!id) return;
+    if (!isAuthed) {
+      goLogin();
+      return;
+    }
+
+    const spotId = Number(id);
+
+    const ok = window.confirm("このレビューを削除しますか？（元に戻せません）");
+    if (!ok) return;
+
+    try {
+      await deleteReview(spotId, reviewId);
+      setReviewsLoading(true);
+      await reloadReviews(spotId);
+    } catch (e: unknown) {
+      console.error(e);
+      setReviewsError(getErrorMessage(e, "レビュー削除に失敗しました。"));
+    }
+  };
+
   const toggleFavorite = async () => {
     if (!spot) return;
+
+    if (!isAuthed) {
+      goLogin();
+      return;
+    }
 
     const spotId = spot.id;
     const next = !spot.isFavorite;
 
-    // 楽観更新
     setSpot({ ...spot, isFavorite: next });
     setFavoriteError(null);
 
@@ -288,11 +404,28 @@ export default function SpotDetailPage() {
         await removeFavorite(spotId);
       }
     } catch (e: unknown) {
-      // ロールバック
       setSpot({ ...spot, isFavorite: !next });
       setFavoriteError(getErrorMessage(e, "お気に入り更新に失敗しました。"));
     }
   };
+
+  const formatAgeGroup = (v?: ChildAgeGroup | null) => {
+    if (!v) return null;
+    return childAgeGroupLabelMap.get(v) ?? v;
+  };
+
+  const Pill = (props: { label: string; value: string }) => (
+    <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+      <span className="text-slate-500">{props.label}</span>
+      <span className="text-slate-900">{props.value}</span>
+    </span>
+  );
+
+  const PillValueOnly = (props: { text: string }) => (
+    <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-800">
+      {props.text}
+    </span>
+  );
 
   if (loading) {
     return <div className="py-10 text-center text-slate-600">読み込み中...</div>;
@@ -385,6 +518,8 @@ export default function SpotDetailPage() {
   const favoriteBtnBase =
     "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold shadow-sm transition focus:outline-none focus:ring-2";
 
+  const isEditing = editingReviewId !== null;
+
   return (
     <div className="py-6">
       <div className="mx-auto w-full max-w-5xl">
@@ -422,6 +557,20 @@ export default function SpotDetailPage() {
           </button>
         </div>
 
+        {!isAuthed && (
+          <div className="mb-4 text-sm text-slate-600">
+            ※ お気に入り登録・レビュー投稿/編集/削除は{" "}
+            <button
+              type="button"
+              className="underline font-semibold text-emerald-700 hover:text-emerald-800"
+              onClick={goLogin}
+            >
+              ログイン
+            </button>{" "}
+            すると使えます。
+          </div>
+        )}
+
         {favoriteError && (
           <div className="mb-4 text-sm text-red-600">エラー: {favoriteError}</div>
         )}
@@ -442,7 +591,9 @@ export default function SpotDetailPage() {
             <div className="p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-bold text-slate-900">エリア</div>
-                <span className={`${badgeBase} border-sky-200 bg-sky-50 text-sky-800`}>
+                <span
+                  className={`${badgeBase} border-sky-200 bg-sky-50 text-sky-800`}
+                >
                   <IconMap className="h-4 w-4" />
                   地域
                 </span>
@@ -458,7 +609,9 @@ export default function SpotDetailPage() {
             <div className="p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-bold text-slate-900">カテゴリ</div>
-                <span className={`${badgeBase} border-emerald-200 bg-emerald-50 text-emerald-800`}>
+                <span
+                  className={`${badgeBase} border-emerald-200 bg-emerald-50 text-emerald-800`}
+                >
                   <IconTag className="h-4 w-4" />
                   種別
                 </span>
@@ -474,7 +627,9 @@ export default function SpotDetailPage() {
             <div className="p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-bold text-slate-900">予算</div>
-                <span className={`${badgeBase} border-orange-200 bg-orange-50 text-orange-800`}>
+                <span
+                  className={`${badgeBase} border-orange-200 bg-orange-50 text-orange-800`}
+                >
                   <IconWallet className="h-4 w-4" />
                   コスト
                 </span>
@@ -490,7 +645,9 @@ export default function SpotDetailPage() {
             <div className="p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-bold text-slate-900">対象年齢</div>
-                <span className={`${badgeBase} border-violet-200 bg-violet-50 text-violet-800`}>
+                <span
+                  className={`${badgeBase} border-violet-200 bg-violet-50 text-violet-800`}
+                >
                   <IconUsers className="h-4 w-4" />
                   年齢
                 </span>
@@ -529,7 +686,9 @@ export default function SpotDetailPage() {
 
               <div className={itemCard}>
                 <div className={labelClass}>コンビニ</div>
-                <div className={valueClass}>{spot.convenienceStore ?? "情報なし"}</div>
+                <div className={valueClass}>
+                  {spot.convenienceStore ?? "情報なし"}
+                </div>
               </div>
 
               <div className={itemCard}>
@@ -689,30 +848,99 @@ export default function SpotDetailPage() {
             {!reviewsLoading && !reviewsError && reviews.length > 0 && (
               <>
                 <ul className="space-y-4">
-                  {visibleReviews.map((r) => (
-                    <li
-                      key={r.id}
-                      className="border border-slate-200 rounded-2xl p-4 bg-slate-50"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="font-semibold text-slate-900">{r.userName}</div>
-                          <div className="text-xs text-slate-500 mt-1">
-                            {formatDateTime(r.createdAt)}
+                  {visibleReviews.map((r) => {
+                    const isMine = !!user && r.userId === user.id;
+
+                    const ageLabel = formatAgeGroup(r.childAgeGroup);
+
+                    return (
+                      <li
+                        key={r.id}
+                        className="border border-slate-200 rounded-2xl p-4 bg-slate-50"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="font-semibold text-slate-900">{r.userName}</div>
+                            <div className="text-xs text-slate-500 mt-1">
+                              {formatDateTime(r.createdAt)}
+                            </div>
+                          </div>
+
+                          {/* ✅ 何の評価か分かるように「総合評価」 */}
+                          <div className="flex items-center gap-2 text-sm text-slate-700">
+                            <span className="text-xs font-semibold text-slate-500">
+                              総合評価
+                            </span>
+                            <span className="text-yellow-500">{renderStars(r.rating)}</span>
+                            <span className="font-semibold">{r.rating}/5</span>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2 text-sm text-slate-700">
-                          <span className="text-yellow-500">{renderStars(r.rating)}</span>
-                          <span className="font-semibold">{r.rating}/5</span>
+                        <div className="text-sm text-slate-700 mt-3 whitespace-pre-wrap leading-relaxed">
+                          {r.reviewText}
                         </div>
-                      </div>
 
-                      <div className="text-sm text-slate-700 mt-3 whitespace-pre-wrap leading-relaxed">
-                        {r.reviewText}
-                      </div>
-                    </li>
-                  ))}
+                        {/* ✅ “全部表示” しつつ、無い項目は出さない（DB/APIが返せば出る） */}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {ageLabel && (
+                            <Pill label="子どもの年齢帯" value={ageLabel} />
+                          )}
+
+                          {r.costTotal !== null && r.costTotal !== undefined && (
+                            <Pill
+                              label="かかった合計金額"
+                              value={`${r.costTotal}円`}
+                            />
+                          )}
+
+                          {r.ratingCost !== null && r.ratingCost !== undefined && (
+                            <PillValueOnly text={`コスパ：${r.ratingCost}/5`} />
+                          )}
+
+                          {r.crowdLevel !== null && r.crowdLevel !== undefined && (
+                            <PillValueOnly text={`混雑の具合：${r.crowdLevel}/5`} />
+                          )}
+
+                          {r.toiletCleanliness !== null &&
+                            r.toiletCleanliness !== undefined && (
+                              <PillValueOnly text={`トイレの清潔度：${r.toiletCleanliness}/5`} />
+                            )}
+
+                          {r.strollerEase !== null && r.strollerEase !== undefined && (
+                            <PillValueOnly text={`ベビーカーの使いやすさ：${r.strollerEase}/5`} />
+                          )}
+                        </div>
+
+                        {isMine && (
+                          <div className="mt-4 flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              className="
+                                px-3 py-2 rounded-xl text-sm font-semibold
+                                border border-slate-200 bg-white text-slate-700
+                                hover:bg-slate-50
+                              "
+                              onClick={() => openEditReviewModal(r)}
+                            >
+                              編集
+                            </button>
+
+                            <button
+                              type="button"
+                              className="
+                                px-3 py-2 rounded-xl text-sm font-semibold
+                                border border-rose-200 bg-rose-50 text-rose-700
+                                hover:bg-rose-100
+                              "
+                              onClick={() => handleDeleteReview(r.id)}
+                            >
+                              削除
+                            </button>
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
 
                 {hasMoreReviews && !showAllReviews && (
@@ -732,7 +960,7 @@ export default function SpotDetailPage() {
         </section>
       </div>
 
-      {/* レビュー投稿モーダル */}
+      {/* レビュー投稿/編集モーダル */}
       {isReviewModalOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -746,7 +974,9 @@ export default function SpotDetailPage() {
           >
             <div className="px-6 py-5 border-b border-orange-100 flex items-center justify-between">
               <div>
-                <div className="text-lg font-bold text-slate-900">レビューを投稿する</div>
+                <div className="text-lg font-bold text-slate-900">
+                  {isEditing ? "レビューを編集する" : "レビューを投稿する"}
+                </div>
                 <div className="text-xs text-slate-500 mt-1">
                   ※ 必須：総合評価・年齢帯・本文
                 </div>
@@ -764,8 +994,12 @@ export default function SpotDetailPage() {
             </div>
 
             <div className="px-6 py-5">
-              {submitError && <div className="text-sm text-red-600 mb-3">エラー: {submitError}</div>}
-              {submitSuccess && <div className="text-sm text-emerald-700 mb-3">{submitSuccess}</div>}
+              {submitError && (
+                <div className="text-sm text-red-600 mb-3">エラー: {submitError}</div>
+              )}
+              {submitSuccess && (
+                <div className="text-sm text-emerald-700 mb-3">{submitSuccess}</div>
+              )}
 
               <div className="mb-4">
                 <div className="text-sm font-semibold text-slate-700 mb-1">
@@ -786,9 +1020,7 @@ export default function SpotDetailPage() {
                 <select
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
                   value={formChildAgeGroup}
-                  onChange={(e) =>
-                    setFormChildAgeGroup(e.target.value as ChildAgeGroup | "")
-                  }
+                  onChange={(e) => setFormChildAgeGroup(e.target.value as ChildAgeGroup | "")}
                 >
                   <option value="">選択してください</option>
                   {childAgeGroupOptions.map((opt) => (
@@ -812,7 +1044,9 @@ export default function SpotDetailPage() {
               </div>
 
               <div className="mb-4">
-                <div className="text-sm font-semibold text-slate-700 mb-2">詳細評価（任意）</div>
+                <div className="text-sm font-semibold text-slate-700 mb-2">
+                  詳細評価（任意）
+                </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
@@ -832,7 +1066,7 @@ export default function SpotDetailPage() {
                   </div>
 
                   <div>
-                    <div className="text-xs text-slate-600 mb-1">混雑度（1〜5）</div>
+                    <div className="text-xs text-slate-600 mb-1">混雑の具合（1〜5）</div>
                     <select
                       className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
                       value={formCrowdLevel}
@@ -848,7 +1082,7 @@ export default function SpotDetailPage() {
                   </div>
 
                   <div>
-                    <div className="text-xs text-slate-600 mb-1">トイレ清潔度（1〜5）</div>
+                    <div className="text-xs text-slate-600 mb-1">トイレの清潔度（1〜5）</div>
                     <select
                       className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
                       value={formToiletCleanliness}
@@ -864,7 +1098,9 @@ export default function SpotDetailPage() {
                   </div>
 
                   <div>
-                    <div className="text-xs text-slate-600 mb-1">ベビーカー（1〜5）</div>
+                    <div className="text-xs text-slate-600 mb-1">
+                      ベビーカーの使いやすさ（1〜5）
+                    </div>
                     <select
                       className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
                       value={formStrollerEase}
@@ -882,7 +1118,9 @@ export default function SpotDetailPage() {
               </div>
 
               <div className="mb-5">
-                <div className="text-sm font-semibold text-slate-700 mb-1">合計金額（任意）</div>
+                <div className="text-sm font-semibold text-slate-700 mb-1">
+                  かかった合計金額（任意）
+                </div>
                 <input
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
                   value={formCostTotal}
@@ -890,13 +1128,10 @@ export default function SpotDetailPage() {
                   placeholder="例：1500"
                   inputMode="numeric"
                 />
-                <div className="text-xs text-slate-600 mt-1">※ 数字のみ（未入力なら送信しません）</div>
+                <div className="text-xs text-slate-600 mt-1">
+                  ※ 数字のみ（未入力なら送信しません）
+                </div>
               </div>
-
-              {/* ✅ お気に入りエラーはモーダル外だが、ここにも出したいならここで表示OK */}
-              {favoriteError && (
-                <div className="text-sm text-red-600 mb-3">エラー: {favoriteError}</div>
-              )}
 
               <div className="flex items-center justify-end gap-3">
                 <button
@@ -914,7 +1149,7 @@ export default function SpotDetailPage() {
                   onClick={handleSubmitReview}
                   disabled={submitLoading}
                 >
-                  {submitLoading ? "送信中..." : "送信"}
+                  {submitLoading ? "送信中..." : isEditing ? "更新" : "送信"}
                 </button>
               </div>
             </div>

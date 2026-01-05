@@ -1,15 +1,23 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import type { Category, FilterState, Spot } from "../types";
 import { fetchSpots } from "../api/spots";
 import { fetchCategories } from "../api/categories";
 import { addFavorite, removeFavorite } from "../api/favorites";
+import { ApiError } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 
 import SpotCard from "../components/SpotCard";
 import { FilterModal } from "../components/FilterModal";
 import { SearchIcon, FilterIcon, MapIcon } from "../components/Icons";
 
 function getErrorMessage(e: unknown, fallback: string) {
+  if (e instanceof ApiError) {
+    if (e.errorCode === "AUTHENTICATION_REQUIRED") return "ログインが必要です。";
+    if (e.errorCode === "ACCESS_DENIED") return "権限がありません。";
+    if (e.errorCode === "VALIDATION_ERROR") return "入力内容を確認してください。";
+    return e.message || fallback;
+  }
   if (e instanceof Error) return e.message;
   if (typeof e === "string") return e;
   return fallback;
@@ -17,6 +25,8 @@ function getErrorMessage(e: unknown, fallback: string) {
 
 export default function SpotListPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const auth = useAuth();
 
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
@@ -34,6 +44,10 @@ export default function SpotListPage() {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoryError, setCategoryError] = useState<string | null>(null);
+
+  const goLogin = () => {
+    navigate("/login", { state: { from: location.pathname } });
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -116,6 +130,12 @@ export default function SpotListPage() {
   };
 
   const toggleFavorite = async (spotId: number, next: boolean) => {
+    // ✅ 未ログインなら、英語エラーを出さずにログインへ
+    if (!auth.token || !auth.user) {
+      goLogin();
+      return;
+    }
+
     setSpots((prev) =>
       prev.map((s) => (s.id === spotId ? { ...s, isFavorite: next } : s))
     );
@@ -127,6 +147,12 @@ export default function SpotListPage() {
         await removeFavorite(spotId);
       }
     } catch (e: unknown) {
+      // ✅ 認証切れなどでもログインへ誘導
+      if (e instanceof ApiError && e.errorCode === "AUTHENTICATION_REQUIRED") {
+        goLogin();
+        return;
+      }
+
       setSpots((prev) =>
         prev.map((s) => (s.id === spotId ? { ...s, isFavorite: !next } : s))
       );
@@ -139,7 +165,11 @@ export default function SpotListPage() {
   }
 
   if (error) {
-    return <div className="py-10 text-center text-red-600">エラー: {error}</div>;
+    return (
+      <div className="py-10 text-center text-red-600">
+        エラー: {error}
+      </div>
+    );
   }
 
   return (

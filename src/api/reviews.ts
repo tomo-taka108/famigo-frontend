@@ -1,45 +1,44 @@
-import type { ReviewCreateRequest, ReviewListItem } from "../types";
+// src/api/reviews.ts
+import type { ReviewListItem, ReviewUpsertRequest } from "../types";
+import { apiFetch } from "./client";
 
-// ---------------------------------------------
-// 共通の API ベースURL（spots.ts と合わせる）
-// ---------------------------------------------
-const BASE_URL = "http://localhost:8080";
-
-
-// ---------------------------------------------
-// レビュー一覧API：GET /spots/{spotId}/reviews
-// ---------------------------------------------
 export const fetchReviewsBySpotId = async (
   spotId: number
 ): Promise<ReviewListItem[]> => {
-  const res = await fetch(`${BASE_URL}/spots/${spotId}/reviews`);
-
-  if (!res.ok) {
-    throw new Error(`Failed to fetch reviews: ${res.status}`);
-  }
-
-  const data: ReviewListItem[] = await res.json();
-  return data;
+  return await apiFetch<ReviewListItem[]>(`/spots/${spotId}/reviews`, {
+    method: "GET",
+  });
 };
 
-
-// ---------------------------------------------
-// レビュー投稿API：POST /spots/{spotId}/reviews
-// ---------------------------------------------
 export const createReview = async (
   spotId: number,
-  body: ReviewCreateRequest
+  body: ReviewUpsertRequest
 ): Promise<void> => {
-  const res = await fetch(`${BASE_URL}/spots/${spotId}/reviews`, {
+  await apiFetch<void>(`/spots/${spotId}/reviews`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
+    body: JSON.stringify(body), // ✅ object → JSON文字列
+    requireAuth: true,
   });
+};
 
-  if (!res.ok) {
-  const text = await res.text().catch(() => "");
-  throw new Error(text || `Failed to create review: ${res.status}`);
-}
+export const updateReview = async (
+  spotId: number,
+  reviewId: number,
+  body: ReviewUpsertRequest
+): Promise<void> => {
+  await apiFetch<void>(`/spots/${spotId}/reviews/${reviewId}`, {
+    method: "PUT",
+    body: JSON.stringify(body), // ✅ object → JSON文字列
+    requireAuth: true,
+  });
+};
+
+export const deleteReview = async (
+  spotId: number,
+  reviewId: number
+): Promise<void> => {
+  await apiFetch<void>(`/spots/${spotId}/reviews/${reviewId}`, {
+    method: "DELETE",
+    requireAuth: true,
+  });
 };
