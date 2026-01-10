@@ -6,6 +6,13 @@ export type LoginRequest = {
   password: string;
 };
 
+export type RegisterRequest = {
+  name: string;
+  email: string;
+  password: string;
+  passwordConfirm: string;
+};
+
 export type MeResponse = {
   id: number;
   name: string;
@@ -18,6 +25,13 @@ export type LoginResponse = {
   tokenType: string; // "Bearer"
   expiresIn: number;
   user: MeResponse;
+};
+
+export const registerApi = async (body: RegisterRequest): Promise<LoginResponse> => {
+  return await apiFetch<LoginResponse>("/auth/register", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 };
 
 export const loginApi = async (body: LoginRequest): Promise<LoginResponse> => {
