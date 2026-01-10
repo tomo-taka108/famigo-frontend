@@ -526,7 +526,7 @@ export default function SpotDetailPage() {
         {/* 戻る + お気に入り */}
         <div className="mb-4 flex items-center justify-between gap-3">
           <Link
-            to="/"
+            to="/spots"
             className="
               inline-flex items-center gap-2
               rounded-xl
