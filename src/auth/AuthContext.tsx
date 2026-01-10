@@ -10,7 +10,13 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import { authStorage } from "./storage";
-import { fetchMeApi, loginApi, type MeResponse } from "../api/auth";
+import {
+  fetchMeApi,
+  loginApi,
+  registerApi,
+  type MeResponse,
+  type RegisterRequest,
+} from "../api/auth";
 import { ApiError } from "../api/client";
 
 type AuthState = {
@@ -21,6 +27,7 @@ type AuthState = {
 
 type AuthContextValue = AuthState & {
   login: (email: string, password: string) => Promise<void>;
+  register: (body: RegisterRequest) => Promise<void>;
   logout: () => void;
   refreshMe: () => Promise<void>;
 };
@@ -74,14 +81,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
   }, []);
 
+  const register = useCallback(async (body: RegisterRequest) => {
+    const res = await registerApi(body);
+    authStorage.setToken(res.accessToken);
+
+    setState({
+      isReady: true,
+      user: res.user,
+      token: res.accessToken,
+    });
+  }, []);
+
+  // 既にトークンがある場合は /auth/me で復元（初回だけ）
   if (!state.isReady && state.token) {
     setState((prev) => ({ ...prev, isReady: true }));
     void refreshMe();
   }
 
   const value = useMemo<AuthContextValue>(
-    () => ({ ...state, login, logout, refreshMe }),
-    [state, login, logout, refreshMe]
+    () => ({ ...state, login, register, logout, refreshMe }),
+    [state, login, register, logout, refreshMe]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
