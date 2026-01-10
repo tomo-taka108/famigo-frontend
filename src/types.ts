@@ -12,21 +12,34 @@ export type ErrorCode =
   | "INTERNAL_ERROR"
   | string;
 
+export type FieldErrorItem = {
+  field: string;
+  message: string;
+};
+
 export interface ApiErrorResponse {
   errorCode: ErrorCode;
   message: string;
+  fieldErrors?: FieldErrorItem[];
 }
 
 // fetch側でthrowする用途（UIで判定できるように）
 export class ApiError extends Error {
   public readonly status: number;
   public readonly errorCode: ErrorCode;
+  public readonly fieldErrors?: FieldErrorItem[];
 
-  constructor(params: { status: number; errorCode: ErrorCode; message: string }) {
+  constructor(params: {
+    status: number;
+    errorCode: ErrorCode;
+    message: string;
+    fieldErrors?: FieldErrorItem[];
+  }) {
     super(params.message);
     this.name = "ApiError";
     this.status = params.status;
     this.errorCode = params.errorCode;
+    this.fieldErrors = params.fieldErrors;
   }
 }
 
@@ -58,11 +71,38 @@ export interface Spot {
   address: string;
   area: string;
   priceType: string;
-  categoryName: string;
   targetAge: string;
-  googleMapUrl: string | null;
+  shortDescription: string;
+  imageUrl?: string | null;
+  isFavorite?: boolean;
+  categoryName?: string;
+}
 
-  isFavorite: boolean;
+// ----------------------------
+// Spot（詳細）
+// ----------------------------
+export interface SpotDetail {
+  id: number;
+  name: string;
+  address: string;
+  area: string;
+  priceType: string;
+  targetAge: string;
+  shortDescription: string;
+  description: string;
+  imageUrl?: string | null;
+  access?: string | null;
+  parking?: string | null;
+  openingHours?: string | null;
+  holiday?: string | null;
+  fee?: string | null;
+  recommendedSeason?: string | null;
+  notes?: string | null;
+  officialUrl?: string | null;
+  googleMapUrl?: string | null;
+
+  categoryId: number;
+  categoryName: string;
 
   diaperChanging: boolean;
   strollerOk: boolean;
@@ -78,137 +118,44 @@ export interface Spot {
 export type PriceType = "FREE" | "UNDER_1000" | "UNDER_2000" | "OVER_2000";
 
 export type AgeGroup =
-  | "ALL"
+  | "BABY"
+  | "TODDLER"
   | "PRESCHOOL"
-  | "ELE_LOW"
-  | "ELE_HIGH"
-  | "JUNIOR_HIGH";
+  | "ELEMENTARY"
+  | "JUNIOR_HIGH"
+  | "HIGH_SCHOOL"
+  | "ADULT";
 
-export type FacilityKey =
-  | "diaper"
-  | "stroller"
-  | "playground"
-  | "athletics"
-  | "water"
-  | "indoor";
-
-export interface FilterState {
-  keyword: string;
-  categoryIds: number[];
-  price: PriceType[];
-  age: AgeGroup[];
-  facilities: FacilityKey[];
+export interface SpotSearchParams {
+  keyword?: string;
+  address?: string;
+  categoryIds?: number[];
+  priceType?: PriceType;
+  ageGroup?: AgeGroup;
+  diaperChanging?: boolean;
+  strollerOk?: boolean;
+  playground?: boolean;
+  athletics?: boolean;
+  waterPlay?: boolean;
+  indoor?: boolean;
 }
 
 // ----------------------------
-// Category（一覧）
-// ----------------------------
-export interface Category {
-  id: number;
-  name: string;
-}
-
-// ----------------------------
-// SpotDetail（詳細）
-// ----------------------------
-export interface SpotDetail {
-  id: number;
-  name: string;
-  address: string;
-  area: string;
-  priceType: string;
-  categoryName: string;
-
-  parkingInfo: string | null;
-  toiletInfo: string | null;
-  targetAge: string | null;
-  stayingTime: string | null;
-  convenienceStore: string | null;
-  restaurantInfo: string | null;
-  googleMapUrl: string | null;
-  closedDays: string | null;
-  officialUrl: string | null;
-  notes: string | null;
-
-  isFavorite: boolean;
-
-  diaperChanging: boolean;
-  strollerOk: boolean;
-  playground: boolean;
-  athletics: boolean;
-  waterPlay: boolean;
-  indoor: boolean;
-}
-
-// ----------------------------
-// Review（子どもの年齢帯）
-// ----------------------------
-export type ChildAgeGroup =
-  | "PRESCHOOL"
-  | "ELE_LOW"
-  | "ELE_HIGH"
-  | "JUNIOR_HIGH_PLUS";
-
-// ----------------------------
-// Review Create（投稿）
-// ----------------------------
-export interface ReviewCreateRequest {
-  childAgeGroup: ChildAgeGroup;
-  rating: number;
-  ratingCost?: number | null;
-  crowdLevel?: number | null;
-  toiletCleanliness?: number | null;
-  strollerEase?: number | null;
-  reviewText: string;
-  costTotal?: number | null;
-}
-
-// ✅ 追加：Review Upsert（投稿/更新 共通）
-// reviews.ts がこれを import しているため必須
-export interface ReviewUpsertRequest {
-  childAgeGroup: ChildAgeGroup;
-  rating: number;
-  ratingCost?: number | null;
-  crowdLevel?: number | null;
-  toiletCleanliness?: number | null;
-  strollerEase?: number | null;
-  reviewText: string;
-  costTotal?: number | null;
-}
-
-// ----------------------------
-// Review Update（更新）
-// ----------------------------
-export interface ReviewUpdateRequest {
-  childAgeGroup: ChildAgeGroup;
-  rating: number;
-  ratingCost?: number | null;
-  crowdLevel?: number | null;
-  toiletCleanliness?: number | null;
-  strollerEase?: number | null;
-  reviewText: string;
-  costTotal?: number | null;
-}
-
-// ----------------------------
-// ReviewListItem（一覧1件）
+// Review
 // ----------------------------
 export interface ReviewListItem {
   id: number;
   spotId: number;
   userId: number;
   userName: string;
-
   rating: number;
-  reviewText: string;
+  comment: string;
+  visitedAt?: string | null;
   createdAt: string;
+}
 
-  childAgeGroup?: ChildAgeGroup | null;
-  ratingCost?: number | null;
-  crowdLevel?: number | null;
-  toiletCleanliness?: number | null;
-  strollerEase?: number | null;
-  costTotal?: number | null;
-
-  isMine?: boolean;
+export interface ReviewCreateRequest {
+  rating: number;
+  comment: string;
+  visitedAt?: string | null;
 }

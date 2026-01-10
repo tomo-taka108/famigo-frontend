@@ -2,7 +2,7 @@
 import { ApiError, type ApiErrorResponse } from "../types";
 import { getToken } from "../auth/storage";
 
-// ✅ 他ファイルが `../api/client` から import している前提があるので再export
+// 他ファイルが `../api/client` から import している前提があるので再export
 export { ApiError } from "../types";
 export type { ApiErrorResponse } from "../types";
 
@@ -27,33 +27,47 @@ const safeReadJson = async <T>(res: Response): Promise<T | null> => {
   return JSON.parse(txt) as T;
 };
 
+type ApiFetchOptions = {
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+  requireAuth?: boolean;
+
+  // 既存互換（spots.ts で auth: true を使っているため）
+  auth?: boolean;
+};
+
 export async function apiFetch<T>(
   path: string,
-  init?: RequestInit & {
-    /** ✅ 新：こちらを使う（favorites / reviews / auth(me) がこれ） */
-    requireAuth?: boolean;
-    /** ✅ 旧互換：残しておく（既存が auth を使ってても動く） */
-    auth?: boolean;
-  }
+  options: ApiFetchOptions = {}
 ): Promise<T> {
-  const url = path.startsWith("http") ? path : `${BASE_URL}${path}`;
+  const url = `${BASE_URL}${path}`;
 
-  const headers = new Headers(init?.headers);
+  const needsAuth = options.requireAuth ?? options.auth ?? false;
+  const token = getToken();
 
-  if (init?.body && !headers.has("content-type")) {
-    headers.set("content-type", "application/json");
+  if (needsAuth && !token) {
+    throw new ApiError({
+      status: 401,
+      errorCode: "AUTHENTICATION_REQUIRED",
+      message: "Authentication required.",
+    });
   }
 
-  // ✅ requireAuth / auth が true なら Authorization を付与
-  const needAuth = init?.requireAuth ?? init?.auth ?? false;
-  if (needAuth) {
-    const token = getToken();
-    if (token) {
-      headers.set("Authorization", `Bearer ${token}`);
-    }
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    ...(options.headers ?? {}),
+  };
+
+  if (token) {
+    headers.authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch(url, { ...init, headers });
+  const res = await fetch(url, {
+    method: options.method ?? "GET",
+    headers,
+    body: options.body,
+  });
 
   if (!res.ok) {
     const err = await safeReadJson<ApiErrorResponse>(res);
@@ -63,6 +77,7 @@ export async function apiFetch<T>(
         status: res.status,
         errorCode: err.errorCode,
         message: err.message,
+        fieldErrors: err.fieldErrors,
       });
     }
 
