@@ -1,109 +1,154 @@
-// src/pages/LandingPage.tsx
-import { Link } from "react-router-dom";
+// src/pages/LoginPage.tsx
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { useAuth } from "../auth/AuthContext";
+import { ApiError, type FieldErrorItem } from "../types";
 
-const FeatureCard = ({
-  title,
-  desc,
-  icon,
-}: {
-  title: string;
-  desc: string;
-  icon: React.ReactNode;
-}) => {
+type LocationState = { from?: string };
+
+type FieldErrors = Partial<Record<"email" | "password", string[]>>;
+
+const groupFieldErrors = (items: FieldErrorItem[] | undefined | null): FieldErrors => {
+  const out: FieldErrors = {};
+  if (!items) return out;
+
+  for (const it of items) {
+    const field = (it.field ?? "").trim();
+    if (field !== "email" && field !== "password") continue;
+    out[field] = [...(out[field] ?? []), it.message];
+  }
+  return out;
+};
+
+const ErrorList = ({ messages }: { messages?: string[] }) => {
+  if (!messages || messages.length === 0) return null;
   return (
-    <div className="rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
-      <div className="flex items-start gap-3">
-        <div className="h-11 w-11 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center">
-          {icon}
-        </div>
-        <div>
-          <div className="text-base font-extrabold text-slate-900">{title}</div>
-          <div className="mt-1 text-sm leading-relaxed text-slate-600">{desc}</div>
-        </div>
-      </div>
-    </div>
+    <ul className="mt-2 space-y-1 text-sm text-rose-700">
+      {messages.map((m, idx) => (
+        <li key={idx} className="leading-relaxed">
+          {m}
+        </li>
+      ))}
+    </ul>
   );
 };
 
-export default function LandingPage() {
+export default function LoginPage() {
+  const auth = useAuth();
+  const nav = useNavigate();
+  const loc = useLocation();
+
+  const from = useMemo(() => {
+    const state = loc.state as LocationState | null;
+    return state?.from ?? "/spots";
+  }, [loc.state]);
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const [globalError, setGlobalError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+
+  const onSubmit = async () => {
+    setGlobalError(null);
+    setFieldErrors({});
+    setLoading(true);
+
+    try {
+      await auth.login(email, password);
+      nav(from, { replace: true });
+    } catch (e: unknown) {
+      if (e instanceof ApiError) {
+        // バリデーション（項目別に）
+        if (e.errorCode === "VALIDATION_ERROR") {
+          setFieldErrors(groupFieldErrors(e.fieldErrors));
+          setGlobalError("入力内容を確認してください。");
+        } else if (e.status === 401) {
+          setGlobalError("メールアドレスまたはパスワードが正しくありません。");
+        } else {
+          setGlobalError(e.message || "ログインに失敗しました。");
+        }
+      } else {
+        setGlobalError("ログインに失敗しました。");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="py-8 md:py-12">
-      {/* Hero */}
-      <div className="rounded-3xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-6 md:p-10 shadow-sm">
-        <div className="max-w-3xl">
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-bold text-emerald-700">
-            Famigo（ファミゴー）
-            <span className="text-slate-500 font-semibold">家族のおでかけを、もっと気軽に</span>
-          </div>
-
-          <h1 className="mt-4 text-2xl md:text-4xl font-extrabold tracking-tight text-slate-900">
-            低コストで楽しめる
-            <span className="text-emerald-700"> おでかけスポット</span>を、
-            さくっと見つけよう
-          </h1>
-
-          <p className="mt-4 text-sm md:text-base leading-relaxed text-slate-600">
-            Famigoは、家族向けのスポット（公園・動物園・水遊び・屋内施設など）を
-            目的や条件で探せるサービスです。レビューやお気に入りで「次の休日」が決まります。
-          </p>
-
-          <div className="mt-6 flex flex-col sm:flex-row gap-3">
-            <Link
-              to="/register"
-              className="inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-extrabold text-white hover:bg-emerald-700"
-            >
-              新規登録
-            </Link>
-            <Link
-              to="/login"
-              className="inline-flex items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 px-6 py-3 text-sm font-bold text-emerald-800 hover:bg-emerald-100"
-            >
+      <div className="mx-auto max-w-xl">
+        <div className="rounded-3xl border border-emerald-100 bg-white shadow-sm overflow-hidden">
+          <div className="px-6 py-5 border-b border-emerald-50 bg-emerald-50/50">
+            <h1 className="text-xl md:text-2xl font-extrabold tracking-tight text-slate-900">
               ログイン
-            </Link>
-            <Link
-              to="/spots"
-              className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-6 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
-            >
-              ゲストで見る（スポット一覧へ）
-            </Link>
+            </h1>
+            <p className="mt-1 text-sm text-slate-600">
+              ログインすると、お気に入りやレビュー投稿が使えます。
+            </p>
           </div>
-        </div>
-      </div>
 
-      {/* Features */}
-      <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
-        <FeatureCard
-          title="検索"
-          desc="エリアやカテゴリ、キーワードで絞り込み。家族の条件に合う場所だけを表示。"
-          icon={<span className="text-emerald-700 font-extrabold">🔍</span>}
-        />
-        <FeatureCard
-          title="詳細"
-          desc="設備情報やGoogleマップ、公式サイトリンクなど、行く前に知りたい情報を整理。"
-          icon={<span className="text-emerald-700 font-extrabold">📍</span>}
-        />
-        <FeatureCard
-          title="レビュー / お気に入り"
-          desc="レビューで体験を共有。気になるスポットはお気に入りに保存して後から見返せる。"
-          icon={<span className="text-emerald-700 font-extrabold">❤️</span>}
-        />
-      </div>
+          <div className="px-6 py-6">
+            {globalError ? (
+              <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+                {globalError}
+              </div>
+            ) : null}
 
-      {/* Bottom CTA */}
-      <div className="mt-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div>
-            <div className="text-lg font-extrabold text-slate-900">次のお休み、どこ行く？</div>
-            <div className="mt-1 text-sm text-slate-600">
-              まずはゲストで一覧を見るだけでもOK。お気に入りやレビューはログイン後に使えます。
+            <div className="space-y-5">
+              <div>
+                <label className="block text-sm font-bold text-slate-700">
+                  メールアドレス
+                </label>
+                <input
+                  type="email"
+                  className="mt-2 block w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-emerald-300"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="例）test@example.com"
+                />
+                <ErrorList messages={fieldErrors.email} />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700">
+                  パスワード
+                </label>
+                <input
+                  type="password"
+                  className="mt-2 block w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-emerald-300"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="パスワードを入力"
+                />
+                <ErrorList messages={fieldErrors.password} />
+              </div>
+
+              <button
+                type="button"
+                onClick={onSubmit}
+                disabled={loading}
+                className="w-full rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-extrabold text-white hover:bg-emerald-700 disabled:opacity-60"
+              >
+                {loading ? "ログイン中..." : "ログイン"}
+              </button>
+
+              <div className="text-center text-sm text-slate-600">
+                アカウントをお持ちでないですか？{" "}
+                <Link to="/register" className="font-bold text-emerald-700 hover:underline">
+                  新規登録へ
+                </Link>
+              </div>
+
+              <div className="text-center text-xs text-slate-500">
+                <Link to="/" className="hover:underline">
+                  トップへ戻る
+                </Link>
+              </div>
             </div>
           </div>
-          <Link
-            to="/spots"
-            className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-6 py-3 text-sm font-extrabold text-white hover:bg-slate-800"
-          >
-            スポット一覧を見る
-          </Link>
         </div>
       </div>
     </div>
