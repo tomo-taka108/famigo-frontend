@@ -86,7 +86,7 @@ export default function FavoritesPage() {
 
         <button
           type="button"
-          onClick={() => navigate("/")}
+          onClick={() => navigate("/spots")}
           className="
             inline-flex items-center justify-center
             rounded-xl border border-slate-200 bg-white
@@ -115,7 +115,7 @@ export default function FavoritesPage() {
           <p className="text-gray-500">お気に入りはまだありません。</p>
           <button
             type="button"
-            onClick={() => navigate("/")}
+            onClick={() => navigate("/spots")}
             className="
               mt-5 inline-flex items-center justify-center
               rounded-xl bg-emerald-600 px-5 py-2.5

@@ -22,44 +22,29 @@ export default function MyPage() {
         <div className="px-6 py-5 space-y-4">
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-xs text-slate-500">ログイン中</div>
-            <div className="mt-1 text-base font-semibold text-slate-900">
+            <div className="mt-2 font-extrabold text-slate-900">
               {user.name}（{user.role}）
             </div>
-            <div className="mt-1 text-sm text-slate-600">{user.email}</div>
+            <div className="text-sm text-slate-600 mt-1">{user.email}</div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex flex-wrap gap-2">
             <NavLink
               to="/favorites"
-              className="
-                inline-flex items-center justify-center
-                rounded-xl border px-4 py-2 text-sm font-semibold
-                shadow-sm transition
-                focus:outline-none focus:ring-2 focus:ring-emerald-200
-                border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100
-              "
+              className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-bold text-rose-700 hover:bg-rose-100"
             >
               お気に入り一覧へ
             </NavLink>
 
             <button
+              type="button"
               onClick={logout}
-              className="
-                inline-flex items-center justify-center
-                rounded-xl border px-4 py-2 text-sm font-semibold
-                shadow-sm transition
-                focus:outline-none focus:ring-2 focus:ring-emerald-200
-                border-slate-200 bg-white text-slate-700 hover:bg-slate-50
-              "
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
             >
               ログアウト
             </button>
           </div>
 
-          <div className="text-sm text-slate-500">
-            ※「自分のレビュー一覧」はバックエンドに専用APIが追加されたタイミングでここに表示します。<br />
-            現時点でも、スポット詳細ページのレビューから「自分のレビュー編集/削除」は可能です。
-          </div>
         </div>
       </div>
     </div>

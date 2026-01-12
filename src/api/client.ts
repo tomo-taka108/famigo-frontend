@@ -63,6 +63,7 @@ export async function apiFetch<T>(
         status: res.status,
         errorCode: err.errorCode,
         message: err.message,
+        fieldErrors: err.fieldErrors,
       });
     }
 

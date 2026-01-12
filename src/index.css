@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 /* =========================================
-   Famigo: Appの土台（Vite初期CSSを排除）
-   - Layoutの中央寄せが正しく効く
+   Famigo: Appの土台
    - bodyのdisplay:flex等の“クセ”をなくす
+   - 背景/フォントで“質素・ツール感”を軽減
    ========================================= */
 
 /* ページ全体を“幅100%”で扱う（これが超重要） */
@@ -17,9 +17,20 @@ body,
 /* 余計な中央寄せ（display:flex/place-items）を消す */
 body {
   margin: 0;
+
+  /* ✅ “ツール感”を消す：やわらかい背景（全ページ共通） */
+  background:
+    radial-gradient(1000px 520px at 12% 0%, rgba(16, 185, 129, 0.18), transparent 60%),
+    radial-gradient(900px 520px at 92% 10%, rgba(245, 158, 11, 0.14), transparent 55%),
+    linear-gradient(to bottom, #ffffff, #f7fbf7);
+
+  /* ✅ フォントを「鮮明で見やすい」Noto Sans JPへ（index.html の link で読み込む） */
+  font-family: "Noto Sans JP", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Hiragino Kaku Gothic ProN", Meiryo, Arial, "Apple Color Emoji",
+    "Segoe UI Emoji";
 }
 
-/* 画像などがはみ出さないように保険（任意だが便利） */
+/* 画像などがはみ出さないように保険 */
 img,
 svg,
 video,
@@ -28,7 +39,7 @@ canvas {
   height: auto;
 }
 
-/* ボタンや入力のフォントを統一（Tailwindと喧嘩しない範囲） */
+/* ボタンや入力のフォントを統一 */
 button,
 input,
 select,

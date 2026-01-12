@@ -12,21 +12,34 @@ export type ErrorCode =
   | "INTERNAL_ERROR"
   | string;
 
+export type FieldErrorItem = {
+  field: string;
+  message: string;
+};
+
 export interface ApiErrorResponse {
   errorCode: ErrorCode;
   message: string;
+  fieldErrors?: FieldErrorItem[]; // ✅ backend ErrorResponse.fieldErrors 対応
 }
 
 // fetch側でthrowする用途（UIで判定できるように）
 export class ApiError extends Error {
   public readonly status: number;
   public readonly errorCode: ErrorCode;
+  public readonly fieldErrors?: FieldErrorItem[];
 
-  constructor(params: { status: number; errorCode: ErrorCode; message: string }) {
+  constructor(params: {
+    status: number;
+    errorCode: ErrorCode;
+    message: string;
+    fieldErrors?: FieldErrorItem[];
+  }) {
     super(params.message);
     this.name = "ApiError";
     this.status = params.status;
     this.errorCode = params.errorCode;
+    this.fieldErrors = params.fieldErrors;
   }
 }
 
@@ -163,8 +176,9 @@ export interface ReviewCreateRequest {
   costTotal?: number | null;
 }
 
-// ✅ 追加：Review Upsert（投稿/更新 共通）
-// reviews.ts がこれを import しているため必須
+// ----------------------------
+// Review Upsert（投稿/更新 共通）
+// ----------------------------
 export interface ReviewUpsertRequest {
   childAgeGroup: ChildAgeGroup;
   rating: number;
