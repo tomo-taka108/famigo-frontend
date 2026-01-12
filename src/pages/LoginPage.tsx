@@ -6,195 +6,154 @@ import { ApiError } from "../types";
 
 type LocationState = { from?: string };
 
+type FieldErrors = Partial<{
+  email: string;
+  password: string;
+  form: string;
+}>;
+
 /**
- * ログイン画面のエラーは「日本語のみ」＆「2行（メール→パスワード）」に正規化する
+ * ✅ ログイン画面のエラーを日本語に寄せる
  */
-function normalizeLoginErrorMessage(e: unknown): string[] {
+function normalizeLoginErrorMessage(e: unknown): string {
   if (e instanceof ApiError) {
     const msg = e.message ?? "";
 
-    // 認証失敗（メール/パスワード違い）を日本語化
+    // 認証失敗（メール/パスワード違い）を日本語化（要望：”間違っています”）
     if (/invalid email or password/i.test(msg)) {
-      return ["メールアドレスまたはパスワードが正しくありません。"];
+      return "メールアドレスまたはパスワードが間違っています。";
     }
 
-    // バリデーション
+    // バリデーションはフォーム側に出す（項目別は別処理）
     if (e.errorCode === "VALIDATION_ERROR") {
-      return parseValidationFailedMessage(msg);
+      return "入力内容を確認してください。";
     }
 
     if (e.errorCode === "AUTHENTICATION_REQUIRED") {
-      return ["ログインが必要です。"];
+      return "ログインが必要です。";
     }
 
-    // 英語っぽいのは日本語に寄せる（最低限）
     if (/invalid/i.test(msg)) {
-      return ["メールアドレスまたはパスワードが正しくありません。"];
+      return "メールアドレスまたはパスワードが間違っています。";
     }
 
-    return [msg || "ログインに失敗しました。"];
+    return msg || "ログインに失敗しました。";
   }
 
   if (e instanceof Error) {
     const msg = e.message ?? "";
-
     if (/invalid email or password/i.test(msg)) {
-      return ["メールアドレスまたはパスワードが正しくありません。"];
+      return "メールアドレスまたはパスワードが間違っています。";
     }
-
-    if (/validation failed/i.test(msg)) {
-      return parseValidationFailedMessage(msg);
-    }
-
-    return [msg || "ログインに失敗しました。"];
+    return msg || "ログインに失敗しました。";
   }
 
-  return ["ログインに失敗しました。"];
-}
-
-/**
- * 例（バックエンド）:
- * "Validation failed: password: 空白は許可されていません; email: 空白は許可されていません"
- * "Validation failed: password: 空白は許可されていません; email: 電子メールアドレスとして正しい形式にしてください"
- *
- * ✅ 2行固定：
- *  1行目: メールアドレス：...
- *  2行目: パスワード：...
- */
-function parseValidationFailedMessage(raw: string): string[] {
-  // "Validation failed:" を除去
-  const msg = raw.replace(/^Validation failed:\s*/i, "").trim();
-
-  const emailMsgs: string[] = [];
-  const passwordMsgs: string[] = [];
-
-  // ✅ 「,」と「;」の両方で分解（今回の原因は ; ）
-  const parts = msg.split(/\s*[;,]\s*/);
-
-  for (const p of parts) {
-    // "email: xxx" / "password: xxx"
-    const m = p.match(/^(email|password)\s*:\s*(.+)$/i);
-    if (!m) continue;
-
-    const field = m[1].toLowerCase();
-    const detail = (m[2] ?? "").trim();
-
-    if (!detail) continue;
-
-    if (field === "email") emailMsgs.push(detail);
-    if (field === "password") passwordMsgs.push(detail);
-  }
-
-  const emailLine =
-    emailMsgs.length > 0 ? `メールアドレス：${emailMsgs.join(" / ")}` : null;
-
-  const passwordLine =
-    passwordMsgs.length > 0 ? `パスワード：${passwordMsgs.join(" / ")}` : null;
-
-  // ✅ 表示順は必ず「メールアドレス → パスワード」
-  const lines = [emailLine, passwordLine].filter((x): x is string => x !== null);
-
-  // 何も拾えない場合は汎用（生文言は出さない）
-  if (lines.length === 0) return ["入力内容を確認してください。"];
-
-  return lines;
+  return "ログインに失敗しました。";
 }
 
 export default function LoginPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const auth = useAuth();
-  const nav = useNavigate();
-  const loc = useLocation();
 
-  const from = useMemo(() => {
-    const state = loc.state as LocationState | null;
-    return state?.from ?? "/";
-  }, [loc.state]);
+  const from = (location.state as LocationState | null)?.from ?? "/spots";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
 
-  // ✅ 2行表示用
-  const [errorLines, setErrorLines] = useState<string[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [errors, setErrors] = useState<FieldErrors>({});
+
+  const hasAnyError = useMemo(() => Object.values(errors).some(Boolean), [errors]);
+
+  const validateClient = (): FieldErrors => {
+    const e: FieldErrors = {};
+    if (!email.trim()) e.email = "メールアドレスを入力してください";
+    if (!password.trim()) e.password = "パスワードを入力してください";
+    return e;
+  };
 
   const onSubmit = async () => {
-    setLoading(true);
-    setErrorLines([]);
+    const clientErrors = validateClient();
+    setErrors(clientErrors);
+    if (Object.values(clientErrors).some(Boolean)) return;
+
+    setSubmitting(true);
+    setErrors({});
 
     try {
-      await auth.login(email, password);
-      nav(from);
+      await auth.login({ email: email.trim(), password });
+      await auth.refreshMe();
+      navigate(from, { replace: true });
     } catch (e: unknown) {
-      setErrorLines(normalizeLoginErrorMessage(e));
+      setErrors({ form: normalizeLoginErrorMessage(e) });
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
   return (
-    <div className="py-10">
-      <div className="mx-auto max-w-3xl px-4">
-        <div className="mb-4">
-          <Link
-            to="/"
-            className="text-sm font-semibold text-slate-700 hover:underline"
-          >
-            ← トップページへ戻る
-          </Link>
+    <div className="mx-auto max-w-md px-4 py-10">
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
+        <div className="text-center">
+          {/* ✅ タイトル：ログイン → ユーザーログイン */}
+          <div className="text-2xl font-extrabold text-slate-900">ユーザーログイン</div>
+          <div className="mt-2 text-sm text-slate-600">ログインしてご利用ください</div>
+
+          <div className="mt-2">
+            <Link to="/" className="text-sm font-semibold text-emerald-700 hover:underline">
+              ← トップページに戻る
+            </Link>
+          </div>
         </div>
 
-        <div className="rounded-2xl border border-emerald-100 bg-white shadow-sm">
-          <div className="px-6 py-5 border-b border-emerald-50">
-            <h1 className="text-xl font-extrabold text-slate-900">ログイン</h1>
-            <p className="text-sm text-slate-600 mt-1">
-              ログインすると、お気に入り・レビュー投稿/編集/削除が使えます。
-            </p>
+        {hasAnyError && errors.form && (
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {errors.form}
+          </div>
+        )}
+
+        <div className="mt-6 space-y-4">
+          <div>
+            <div className="text-sm font-semibold text-slate-700 mb-1">メールアドレス</div>
+            <input
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+              placeholder="メールアドレスを入力"
+            />
+            {errors.email && <div className="mt-1 text-xs text-red-600">{errors.email}</div>}
           </div>
 
-          <div className="px-6 py-6">
-            {errorLines.length > 0 && (
-              <div className="mb-4 text-sm text-red-600">
-                {errorLines.map((line, idx) => (
-                  <div key={idx}>{line}</div>
-                ))}
-              </div>
-            )}
+          <div>
+            <div className="text-sm font-semibold text-slate-700 mb-1">パスワード</div>
+            <input
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              placeholder="パスワードを入力"
+            />
+            {errors.password && <div className="mt-1 text-xs text-red-600">{errors.password}</div>}
+          </div>
 
-            <div className="space-y-4">
-              <div>
-                <div className="text-sm font-semibold text-slate-700 mb-1">
-                  メールアドレス
-                </div>
-                <input
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  autoComplete="email"
-                />
-              </div>
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={submitting}
+            className="w-full rounded-xl bg-blue-600 text-white font-extrabold py-3 text-sm hover:bg-blue-700 disabled:opacity-60"
+          >
+            ログイン
+          </button>
 
-              <div>
-                <div className="text-sm font-semibold text-slate-700 mb-1">
-                  パスワード
-                </div>
-                <input
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={onSubmit}
-                disabled={loading}
-                className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-extrabold text-white hover:bg-emerald-700 disabled:opacity-60"
-              >
-                {loading ? "ログイン中..." : "ログイン"}
-              </button>
-            </div>
+          {/* ✅ 誘導文追加（添付③） */}
+          <div className="text-center text-sm text-slate-600 mt-2">
+            アカウントをお持ちでない場合{" "}
+            <Link to="/register" className="font-bold text-blue-600 hover:underline">
+              新規登録はこちら
+            </Link>
           </div>
         </div>
       </div>

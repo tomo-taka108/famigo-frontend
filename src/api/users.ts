@@ -10,39 +10,58 @@ export type UpdateEmailRequest = {
   email: string;
 };
 
-export type ChangePasswordRequest = {
+export type UpdateProfileRequest = {
+  displayName: string;
+  email: string;
+};
+
+export type UpdatePasswordRequest = {
   currentPassword: string;
   newPassword: string;
   newPasswordConfirm: string;
 };
 
-export const updateMyDisplayNameApi = async (
+export const updateDisplayNameApi = async (
   body: UpdateDisplayNameRequest
 ): Promise<MeResponse> => {
   return await apiFetch<MeResponse>("/users/me/display-name", {
     method: "PUT",
-    body: JSON.stringify(body),
     requireAuth: true,
+    body: JSON.stringify(body),
   });
 };
 
-export const updateMyEmailApi = async (body: UpdateEmailRequest): Promise<MeResponse> => {
+export const updateEmailApi = async (body: UpdateEmailRequest): Promise<MeResponse> => {
   return await apiFetch<MeResponse>("/users/me/email", {
     method: "PUT",
-    body: JSON.stringify(body),
     requireAuth: true,
+    body: JSON.stringify(body),
   });
 };
 
-export const changeMyPasswordApi = async (body: ChangePasswordRequest): Promise<void> => {
-  await apiFetch<void>("/users/me/password", {
+/**
+ * アカウント設定の「更新」ボタン用。
+ * 表示名 + メールを同時更新して、方針（原子性）を満たす。
+ */
+export const updateProfileApi = async (body: UpdateProfileRequest): Promise<MeResponse> => {
+  return await apiFetch<MeResponse>("/users/me/profile", {
     method: "PUT",
-    body: JSON.stringify(body),
     requireAuth: true,
+    body: JSON.stringify(body),
   });
 };
 
-export const withdrawMeApi = async (): Promise<void> => {
+export const updatePasswordApi = async (
+  body: UpdatePasswordRequest
+): Promise<MeResponse> => {
+  return await apiFetch<MeResponse>("/users/me/password", {
+    method: "PUT",
+    requireAuth: true,
+    body: JSON.stringify(body),
+  });
+};
+
+export const deleteMeApi = async (): Promise<void> => {
   await apiFetch<void>("/users/me", {
     method: "DELETE",
     requireAuth: true,

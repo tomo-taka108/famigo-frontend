@@ -2,7 +2,7 @@
 import { ApiError, type ApiErrorResponse } from "../types";
 import { getToken } from "../auth/storage";
 
-// 他ファイルが `../api/client` から import している前提があるので再export
+// ✅ 他ファイルが `../api/client` から import している前提があるので再export
 export { ApiError } from "../types";
 export type { ApiErrorResponse } from "../types";
 
@@ -27,47 +27,33 @@ const safeReadJson = async <T>(res: Response): Promise<T | null> => {
   return JSON.parse(txt) as T;
 };
 
-type ApiFetchOptions = {
-  method?: string;
-  headers?: Record<string, string>;
-  body?: string;
-  requireAuth?: boolean;
-
-  // 既存互換（spots.ts で auth: true を使っているため）
-  auth?: boolean;
-};
-
 export async function apiFetch<T>(
   path: string,
-  options: ApiFetchOptions = {}
+  init?: RequestInit & {
+    /** ✅ 新：こちらを使う（favorites / reviews / auth(me) がこれ） */
+    requireAuth?: boolean;
+    /** ✅ 旧互換：残しておく（既存が auth を使ってても動く） */
+    auth?: boolean;
+  }
 ): Promise<T> {
-  const url = `${BASE_URL}${path}`;
+  const url = path.startsWith("http") ? path : `${BASE_URL}${path}`;
 
-  const needsAuth = options.requireAuth ?? options.auth ?? false;
-  const token = getToken();
+  const headers = new Headers(init?.headers);
 
-  if (needsAuth && !token) {
-    throw new ApiError({
-      status: 401,
-      errorCode: "AUTHENTICATION_REQUIRED",
-      message: "Authentication required.",
-    });
+  if (init?.body && !headers.has("content-type")) {
+    headers.set("content-type", "application/json");
   }
 
-  const headers: Record<string, string> = {
-    "content-type": "application/json",
-    ...(options.headers ?? {}),
-  };
-
-  if (token) {
-    headers.authorization = `Bearer ${token}`;
+  // ✅ requireAuth / auth が true なら Authorization を付与
+  const needAuth = init?.requireAuth ?? init?.auth ?? false;
+  if (needAuth) {
+    const token = getToken();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
   }
 
-  const res = await fetch(url, {
-    method: options.method ?? "GET",
-    headers,
-    body: options.body,
-  });
+  const res = await fetch(url, { ...init, headers });
 
   if (!res.ok) {
     const err = await safeReadJson<ApiErrorResponse>(res);

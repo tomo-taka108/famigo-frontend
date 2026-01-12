@@ -7,7 +7,8 @@ export type LoginRequest = {
 };
 
 export type RegisterRequest = {
-  name: string;
+  // バックエンド RegisterRequest に合わせる
+  displayName: string;
   email: string;
   password: string;
   passwordConfirm: string;
@@ -22,20 +23,19 @@ export type MeResponse = {
 
 export type LoginResponse = {
   accessToken: string;
-  tokenType: string; // "Bearer"
-  expiresIn: number;
   user: MeResponse;
 };
 
-export const registerApi = async (body: RegisterRequest): Promise<LoginResponse> => {
-  return await apiFetch<LoginResponse>("/auth/register", {
+export const loginApi = async (body: LoginRequest): Promise<LoginResponse> => {
+  return await apiFetch<LoginResponse>("/auth/login", {
     method: "POST",
     body: JSON.stringify(body),
   });
 };
 
-export const loginApi = async (body: LoginRequest): Promise<LoginResponse> => {
-  return await apiFetch<LoginResponse>("/auth/login", {
+// ✅ 追加：登録（register は LoginResponse を返す＝自動ログイン可）
+export const registerApi = async (body: RegisterRequest): Promise<LoginResponse> => {
+  return await apiFetch<LoginResponse>("/auth/register", {
     method: "POST",
     body: JSON.stringify(body),
   });
