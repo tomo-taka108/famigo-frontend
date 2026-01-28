@@ -66,7 +66,7 @@ export default function LandingPage() {
                   <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
                     <SearchIcon className="h-5 w-5" />
                   </span>
-                  <div className="font-extrabold text-slate-900">一覧検索</div>
+                  <div className="font-extrabold text-slate-900 text-xl">一覧検索</div>
                 </div>
                 {/* ✅ 文言差し替え */}
                 <div className="mt-3 text-sm text-slate-600 leading-relaxed">
@@ -79,7 +79,7 @@ export default function LandingPage() {
                   <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-800">
                     <MapIcon className="h-5 w-5" />
                   </span>
-                  <div className="font-extrabold text-slate-900">詳細</div>
+                  <div className="font-extrabold text-slate-900 text-xl">詳細</div>
                 </div>
                 {/* ✅ 文言差し替え */}
                 <div className="mt-3 text-sm text-slate-600 leading-relaxed">
@@ -92,14 +92,14 @@ export default function LandingPage() {
                   <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-yellow-50 text-yellow-700">
                     <StarIcon className="h-5 w-5" />
                   </span>
-                  <div className="font-extrabold text-slate-900">レビュー</div>
+                  <div className="font-extrabold text-slate-900 text-xl">レビュー</div>
                 </div>
 
-                {/* ✅ 「みんなの口コミを確認」(改行して)「口コミを投稿」 */}
+                {/* ✅ 「みんなの口コミを確認」(改行して)「自分の口コミを投稿」 */}
                 <div className="mt-3 text-sm text-slate-600 leading-relaxed">
                   みんなの口コミを確認
                   <br />
-                  口コミを投稿
+                  自分の口コミを投稿
                 </div>
               </div>
 
@@ -108,10 +108,12 @@ export default function LandingPage() {
                   <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
                     <HeartIcon className="h-5 w-5" />
                   </span>
-                  <div className="font-extrabold text-slate-900">お気に入り</div>
+                  <div className="font-extrabold text-slate-900 text-xl">お気に入り</div>
                 </div>
                 <div className="mt-3 text-sm text-slate-600 leading-relaxed">
-                  気になるスポットを保存して管理
+                  気になるスポットを
+                  <br />
+                  保存して管理
                 </div>
               </div>
             </div>
