@@ -6,7 +6,28 @@ import { getToken } from "../auth/storage";
 export { ApiError } from "../types";
 export type { ApiErrorResponse } from "../types";
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
+/**
+ * APIのベースURL
+ *
+ * - 本番（S3/CloudFront）はビルド時に .env.production の値が埋め込まれる前提
+ * - ローカル開発（Vite dev）では未設定でも localhost:8080 を使えるようにする
+ *
+ * ※本番なのに未設定でビルドすると「公開後に通信先が localhost になって詰む」ので、
+ *   import時点で落として気づけるようにする（Fail Fast）
+ */
+const resolveBaseUrl = (): string => {
+  const raw = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
+  const trimmed = raw.trim();
+
+  if (trimmed !== "") return trimmed.replace(/\/+$/, "");
+
+  if (import.meta.env.DEV) return "http://localhost:8080";
+
+  // PROD で未設定は事故なので即エラーにする
+  throw new Error("VITE_API_BASE_URL is not set. Set it in .env.production before building.");
+};
+
+const BASE_URL = resolveBaseUrl();
 
 const isJsonResponse = (res: Response) => {
   const ct = res.headers.get("content-type") ?? "";
@@ -36,7 +57,11 @@ export async function apiFetch<T>(
     auth?: boolean;
   }
 ): Promise<T> {
-  const url = path.startsWith("http") ? path : `${BASE_URL}${path}`;
+  const normalizedPath = path.startsWith("http")
+      ? path
+      : path.startsWith("/")
+          ? `${BASE_URL}${path}`
+          : `${BASE_URL}/${path}`;
 
   const headers = new Headers(init?.headers);
 
@@ -53,7 +78,7 @@ export async function apiFetch<T>(
     }
   }
 
-  const res = await fetch(url, { ...init, headers });
+  const res = await fetch(normalizedPath, { ...init, headers });
 
   if (!res.ok) {
     const err = await safeReadJson<ApiErrorResponse>(res);
