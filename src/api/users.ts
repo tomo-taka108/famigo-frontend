@@ -51,10 +51,9 @@ export const updateProfileApi = async (body: UpdateProfileRequest): Promise<MeRe
   });
 };
 
-export const updatePasswordApi = async (
-  body: UpdatePasswordRequest
-): Promise<MeResponse> => {
-  return await apiFetch<MeResponse>("/users/me/password", {
+// password変更は「返却なし」に合わせる（204想定）
+export const updatePasswordApi = async (body: UpdatePasswordRequest): Promise<void> => {
+  await apiFetch<void>("/users/me/password", {
     method: "PUT",
     requireAuth: true,
     body: JSON.stringify(body),
