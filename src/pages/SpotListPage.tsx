@@ -9,7 +9,7 @@ import { useAuth } from "../auth/AuthContext";
 
 import SpotCard from "../components/SpotCard";
 import { FilterModal } from "../components/FilterModal";
-import { SearchIcon, FilterIcon, MapIcon } from "../components/Icons";
+import { SearchIcon, FilterIcon } from "../components/Icons";
 
 function getErrorMessage(e: unknown, fallback: string) {
   if (e instanceof ApiError) {
@@ -165,11 +165,7 @@ export default function SpotListPage() {
   }
 
   if (error) {
-    return (
-      <div className="py-10 text-center text-red-600">
-        エラー: {error}
-      </div>
-    );
+    return <div className="py-10 text-center text-red-600">エラー: {error}</div>;
   }
 
   return (
@@ -210,15 +206,6 @@ export default function SpotListPage() {
                   className="flex-1 md:flex-none px-4 py-3 rounded-xl font-semibold text-white bg-orange-500 hover:bg-orange-600 transition-colors shadow-sm"
                 >
                   検索
-                </button>
-
-                <button
-                  className="hidden md:flex items-center justify-center gap-2 px-4 py-3 border border-emerald-200 rounded-xl bg-white hover:bg-emerald-50 active:bg-emerald-100 transition-colors shadow-sm"
-                  disabled
-                  title="地図表示は今後実装予定"
-                >
-                  <MapIcon className="w-5 h-5 text-emerald-700" />
-                  地図
                 </button>
               </div>
             </div>
