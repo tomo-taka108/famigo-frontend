@@ -2,14 +2,6 @@
 import { apiFetch } from "./client";
 import type { MeResponse } from "./auth";
 
-export type UpdateDisplayNameRequest = {
-  displayName: string;
-};
-
-export type UpdateEmailRequest = {
-  email: string;
-};
-
 export type UpdateProfileRequest = {
   displayName: string;
   email: string;
@@ -19,24 +11,6 @@ export type UpdatePasswordRequest = {
   currentPassword: string;
   newPassword: string;
   newPasswordConfirm: string;
-};
-
-export const updateDisplayNameApi = async (
-  body: UpdateDisplayNameRequest
-): Promise<MeResponse> => {
-  return await apiFetch<MeResponse>("/users/me/display-name", {
-    method: "PUT",
-    requireAuth: true,
-    body: JSON.stringify(body),
-  });
-};
-
-export const updateEmailApi = async (body: UpdateEmailRequest): Promise<MeResponse> => {
-  return await apiFetch<MeResponse>("/users/me/email", {
-    method: "PUT",
-    requireAuth: true,
-    body: JSON.stringify(body),
-  });
 };
 
 /**
