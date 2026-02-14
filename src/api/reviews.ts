@@ -5,7 +5,7 @@ import { apiFetch } from "./client";
 export const fetchReviewsBySpotId = async (
   spotId: number
 ): Promise<ReviewListItem[]> => {
-  return await apiFetch<ReviewListItem[]>(`/spots/${spotId}/reviews`, {
+  return await apiFetch<ReviewListItem[]>(`/api/spots/${spotId}/reviews`, {
     method: "GET",
   });
 };
@@ -14,9 +14,9 @@ export const createReview = async (
   spotId: number,
   body: ReviewUpsertRequest
 ): Promise<void> => {
-  await apiFetch<void>(`/spots/${spotId}/reviews`, {
+  await apiFetch<void>(`/api/spots/${spotId}/reviews`, {
     method: "POST",
-    body: JSON.stringify(body), // ✅ object → JSON文字列
+    body: JSON.stringify(body),
     requireAuth: true,
   });
 };
@@ -26,9 +26,9 @@ export const updateReview = async (
   reviewId: number,
   body: ReviewUpsertRequest
 ): Promise<void> => {
-  await apiFetch<void>(`/spots/${spotId}/reviews/${reviewId}`, {
+  await apiFetch<void>(`/api/spots/${spotId}/reviews/${reviewId}`, {
     method: "PUT",
-    body: JSON.stringify(body), // ✅ object → JSON文字列
+    body: JSON.stringify(body),
     requireAuth: true,
   });
 };
@@ -37,7 +37,7 @@ export const deleteReview = async (
   spotId: number,
   reviewId: number
 ): Promise<void> => {
-  await apiFetch<void>(`/spots/${spotId}/reviews/${reviewId}`, {
+  await apiFetch<void>(`/api/spots/${spotId}/reviews/${reviewId}`, {
     method: "DELETE",
     requireAuth: true,
   });

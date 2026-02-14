@@ -119,7 +119,7 @@ export const mapBackendSpotDetailToSpotDetail = (dto: BackendSpotDetailDto): Spo
 });
 
 // ---------------------------------------------
-// 一覧API：GET /spots
+// 一覧API：GET /api/spots
 // ※ isFavorite を返したいなら auth:true が必要（バックが認証必須化している場合）
 // ---------------------------------------------
 export const fetchSpots = async (filter?: Partial<FilterState>): Promise<Spot[]> => {
@@ -134,7 +134,7 @@ export const fetchSpots = async (filter?: Partial<FilterState>): Promise<Spot[]>
   filter?.age?.forEach((a) => qs.append("age", a));
   filter?.facilities?.forEach((f) => qs.append("facilities", f));
 
-  const path = qs.toString() ? `/spots?${qs.toString()}` : `/spots`;
+  const path = qs.toString() ? `/api/spots?${qs.toString()}` : `/api/spots`;
 
   // ✅ ここがポイント：
   // backendが「スポット一覧でも isFavorite を出すために認証必須」にしている場合、
@@ -145,9 +145,9 @@ export const fetchSpots = async (filter?: Partial<FilterState>): Promise<Spot[]>
 };
 
 // ---------------------------------------------
-// 詳細API：GET /spots/{id}
+// 詳細API：GET /api/spots/{id}
 // ---------------------------------------------
 export const fetchSpotDetail = async (id: number): Promise<SpotDetail> => {
-  const data = await apiFetch<BackendSpotDetailDto>(`/spots/${id}`, { method: "GET", auth: true });
+  const data = await apiFetch<BackendSpotDetailDto>(`/api/spots/${id}`, { method: "GET", auth: true });
   return mapBackendSpotDetailToSpotDetail(data);
 };
