@@ -3,11 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError } from "../../types";
 import { useAuth } from "../../auth/AuthContext";
-import {
-  deleteMeApi,
-  updateProfileApi,
-  updatePasswordApi,
-} from "../../api/users";
+import { deleteMeApi, updateProfileApi, updatePasswordApi } from "../../api/users";
 
 type FieldErrors = Partial<{
   displayName: string;
@@ -21,7 +17,8 @@ type FieldErrors = Partial<{
 function toJaMessage(msg: string): string {
   if (/email is already registered/i.test(msg)) return "そのメールアドレスは既に登録されています。";
   if (/invalid current password/i.test(msg)) return "現在のパスワードが間違っています。";
-  if (/デモアカウントはアカウント情報を変更できません/.test(msg)) return "デモアカウントはアカウント情報を変更できません。";
+  if (/デモアカウントはアカウント情報を変更できません/.test(msg))
+    return "デモアカウントはアカウント情報を変更できません。";
   return msg;
 }
 
@@ -76,7 +73,7 @@ export default function AccountPage() {
   const isDemoUser = useMemo(() => {
     const mail = (auth.user?.email ?? "").toLowerCase();
     return mail === "demo_user@example.com";
-  }, [auth.user?.email]);
+  }, [auth.user]);
 
   const resetMessages = () => {
     setErrors({});
@@ -95,105 +92,161 @@ export default function AccountPage() {
     resetMessages();
     setSaving(true);
 
-    try {
-      const tasks: Promise<unknown>[] = [];
+    // ================================
+    // 1) まずは「全部まとめて」UIバリデーション
+    //   - 途中 return で打ち切らない
+    //   - プロフィールとパスワードのエラーを同時表示できるようにする
+    // ================================
+    const nextDisplayName = displayName.trim();
+    const nextEmail = email.trim();
 
-      // 方針A（原子性）：表示名/メールは「まとめて1リクエスト」で更新する
-      // - どちらかが不正なら、どちらも更新されない
-      const nextDisplayName = displayName.trim();
-      const nextEmail = email.trim();
+    const displayNameChanged = nextDisplayName !== (auth.user.name ?? "");
+    const emailChanged = nextEmail !== (auth.user.email ?? "");
+    const profileChanged = displayNameChanged || emailChanged;
 
-      const displayNameChanged = nextDisplayName !== (auth.user.name ?? "");
-      const emailChanged = nextEmail !== (auth.user.email ?? "");
-      const profileChanged = displayNameChanged || emailChanged;
+    const wantsPasswordChange =
+      currentPassword.trim() !== "" || newPassword.trim() !== "" || newPasswordConfirm.trim() !== "";
 
-      if (profileChanged) {
-        tasks.push(
-          updateProfileApi({
-            displayName: nextDisplayName,
-            email: nextEmail,
-          })
-        );
+    const profileErrors: FieldErrors = {};
+    if (profileChanged) {
+      // 表示名
+      if (!nextDisplayName) profileErrors.displayName = "表示名（ユーザー名）を入力してください";
+      else if (nextDisplayName.length < 3)
+        profileErrors.displayName = "表示名（ユーザー名）は3文字以上で入力してください";
+
+      // メール
+      if (!nextEmail) {
+        profileErrors.email = "メールアドレスを入力してください";
+      } else {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(nextEmail)) profileErrors.email = "有効なメールアドレスを入力してください";
+        else if (nextEmail.length > 255) profileErrors.email = "メールアドレスは255文字以内で入力してください";
+      }
+    }
+
+    const passwordErrors: FieldErrors = {};
+    if (wantsPasswordChange) {
+      // ここは「最低限のUIチェック」だけ（backend DTO が主役）
+      if (!currentPassword.trim()) passwordErrors.currentPassword = "現在のパスワードを入力してください";
+      if (!newPassword.trim()) passwordErrors.newPassword = "新しいパスワードを入力してください";
+      if (!newPasswordConfirm.trim())
+        passwordErrors.newPasswordConfirm = "新しいパスワード確認を入力してください";
+
+      if (newPassword && newPassword.length > 0 && newPassword.length < 6) {
+        passwordErrors.newPassword = "新しいパスワードは6文字以上で入力してください";
+      }
+      if (newPassword && newPasswordConfirm && newPassword !== newPasswordConfirm) {
+        passwordErrors.newPasswordConfirm = "新しいパスワードが一致しません";
+      }
+    }
+
+    const clientErrors: FieldErrors = { ...profileErrors, ...passwordErrors };
+
+    // ここで一旦エラーを反映（「同時表示」させるため）
+    if (Object.values(clientErrors).some(Boolean)) {
+      setErrors(clientErrors);
+    }
+
+    // ================================
+    // 2) API呼び出しの可否を「セクション単位」で判断
+    //   - プロフィールにエラーがあればプロフィール更新は送らない
+    //   - パスワードにエラーがあればパスワード変更は送らない
+    //   - 片方がエラーでも、もう片方がOKなら実行できる
+    // ================================
+    const canUpdateProfile = profileChanged && !Object.values(profileErrors).some(Boolean);
+    const canUpdatePassword = wantsPasswordChange && !Object.values(passwordErrors).some(Boolean);
+
+    // 何も送れない（=エラーがある/変更がない）
+    if (!canUpdateProfile && !canUpdatePassword) {
+      if (!profileChanged && !wantsPasswordChange) {
+        setSuccess("変更はありません。");
+      }
+      setSaving(false);
+      return;
+    }
+
+    // ================================
+    // 3) サーバーエラーは「上書きではなくマージ」
+    // ================================
+    const serverErrors: FieldErrors = {};
+
+    const mergeApiError = (e: ApiError) => {
+      const msg = toJaMessage(e.message ?? "");
+
+      // 既知エラーは項目に出す（優先）
+      if (/既に登録されています/.test(msg)) {
+        serverErrors.email = msg;
+        return;
+      }
+      if (/現在のパスワードが間違っています/.test(msg)) {
+        serverErrors.currentPassword = msg;
+        return;
       }
 
-      const wantsPasswordChange =
-        currentPassword.trim() !== "" ||
-        newPassword.trim() !== "" ||
-        newPasswordConfirm.trim() !== "";
+      // DTO の fieldErrors と連携して項目別表示
+      if (e.errorCode === "VALIDATION_ERROR") {
+        const fe = mapFieldErrorsFromApiError(e);
+        Object.assign(serverErrors, fe);
+        return;
+      }
 
-      if (wantsPasswordChange) {
-        // ここは「最低限のUIチェック」だけ残す（backend のDTOが主役）
-        const e: FieldErrors = {};
-        if (!currentPassword.trim()) e.currentPassword = "現在のパスワードを入力してください";
-        if (!newPassword.trim()) e.newPassword = "新しいパスワードを入力してください";
-        if (!newPasswordConfirm.trim()) e.newPasswordConfirm = "新しいパスワード確認を入力してください";
-        if (newPassword && newPassword.length > 0 && newPassword.length < 6) {
-          e.newPassword = "新しいパスワードは6文字以上で入力してください";
-        }
-        if (newPassword && newPasswordConfirm && newPassword !== newPasswordConfirm) {
-          e.newPasswordConfirm = "新しいパスワードが一致しません";
-        }
-        if (Object.values(e).some(Boolean)) {
-          setErrors(e);
-          setSaving(false);
-          return;
-        }
+      serverErrors.form = msg || "更新に失敗しました。";
+    };
 
-        tasks.push(
-          updatePasswordApi({
+    let profileUpdated = false;
+    let passwordUpdated = false;
+
+    try {
+      // プロフィール更新
+      if (canUpdateProfile) {
+        try {
+          await updateProfileApi({
+            displayName: nextDisplayName,
+            email: nextEmail,
+          });
+          profileUpdated = true;
+        } catch (e: unknown) {
+          if (e instanceof ApiError) mergeApiError(e);
+          else if (e instanceof Error) serverErrors.form = toJaMessage(e.message) || "更新に失敗しました。";
+          else serverErrors.form = "更新に失敗しました。";
+        }
+      }
+
+      // パスワード変更
+      if (canUpdatePassword) {
+        try {
+          await updatePasswordApi({
             currentPassword: currentPassword.trim(),
             newPassword,
             newPasswordConfirm,
-          })
-        );
+          });
+          passwordUpdated = true;
+        } catch (e: unknown) {
+          if (e instanceof ApiError) mergeApiError(e);
+          else if (e instanceof Error) serverErrors.form = toJaMessage(e.message) || "更新に失敗しました。";
+          else serverErrors.form = "更新に失敗しました。";
+        }
       }
 
-      if (tasks.length === 0) {
-        setSuccess("変更はありません。");
+      // サーバー側エラーがあれば表示して終了（クライアント側エラーは残したまま）
+      if (Object.values(serverErrors).some(Boolean)) {
+        setErrors({ ...clientErrors, ...serverErrors });
         return;
       }
 
-      await Promise.all(tasks);
-
-      // ヘッダー反映のため refreshMe
-      await auth.refreshMe();
+      // ヘッダー反映のため refreshMe（プロフィール更新が成功したときだけ）
+      if (profileUpdated) {
+        await auth.refreshMe();
+      }
 
       // パスワード欄は成功後にクリア
-      setCurrentPassword("");
-      setNewPassword("");
-      setNewPasswordConfirm("");
+      if (passwordUpdated) {
+        setCurrentPassword("");
+        setNewPassword("");
+        setNewPasswordConfirm("");
+      }
 
       setSuccess("更新しました。");
-    } catch (e: unknown) {
-      if (e instanceof ApiError) {
-        const msg = toJaMessage(e.message ?? "");
-
-        // 既知エラーは項目に出す（優先）
-        if (/既に登録されています/.test(msg)) {
-          setErrors({ email: msg });
-          return;
-        }
-        if (/現在のパスワードが間違っています/.test(msg)) {
-          setErrors({ currentPassword: msg });
-          return;
-        }
-
-        // 指摘対応：DTOの fieldErrors と連携して項目別表示
-        if (e.errorCode === "VALIDATION_ERROR") {
-          setErrors(mapFieldErrorsFromApiError(e));
-          return;
-        }
-
-        setErrors({ form: msg || "更新に失敗しました。" });
-        return;
-      }
-
-      if (e instanceof Error) {
-        setErrors({ form: toJaMessage(e.message) || "更新に失敗しました。" });
-        return;
-      }
-
-      setErrors({ form: "更新に失敗しました。" });
     } finally {
       setSaving(false);
     }
@@ -218,55 +271,45 @@ export default function AccountPage() {
         e instanceof ApiError
           ? toJaMessage(e.message ?? "") || "退会に失敗しました。"
           : e instanceof Error
-          ? toJaMessage(e.message) || "退会に失敗しました。"
-          : "退会に失敗しました。";
+            ? toJaMessage(e.message) || "退会に失敗しました。"
+            : "退会に失敗しました。";
       setErrors({ form: msg });
     } finally {
       setSaving(false);
     }
   };
 
-  if (!auth.user) return null;
-
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      <div className="rounded-2xl border border-emerald-100 bg-white shadow-sm">
-        <div className="px-6 py-5 border-b border-emerald-50">
-          <h1 className="text-xl md:text-2xl font-extrabold tracking-tight">アカウント設定</h1>
-          <div className="text-sm text-slate-500 mt-2">
-            表示名・メール・パスワードの変更、退会ができます。
-          </div>
+    <div className="min-h-[calc(100vh-120px)] px-4 py-8">
+      <div className="mx-auto w-full max-w-215 rounded-2xl bg-white border border-emerald-100 shadow-sm overflow-hidden">
+        <div className="px-6 py-5 bg-emerald-50 border-b border-emerald-100">
+          <h1 className="text-lg font-bold text-slate-900">アカウント設定</h1>
+          <p className="mt-1 text-sm text-slate-600">表示名・メール・パスワードの変更、退会ができます。</p>
         </div>
 
-        <div className="px-6 py-6 space-y-8">
-          {isDemoUser && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              デモアカウントはポートフォリオ閲覧者向けのため、アカウント情報の変更・退会はできません。
-            </div>
-          )}
-
-          {hasAnyError && errors.form && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {errors.form}
-            </div>
-          )}
-
+        <div className="p-6 space-y-6">
           {success && (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
               {success}
             </div>
           )}
 
-          {/* 縦並び */}
-          <div className="space-y-5">
+          {errors.form && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {errors.form}
+            </div>
+          )}
+
+          {/* プロフィール */}
+          <div className="space-y-4">
             <div>
               <div className="text-sm font-semibold text-slate-700 mb-1">表示名</div>
               <input
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-100"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder="表示名を入力"
-                disabled={saving || isDemoUser}
+                disabled={saving}
               />
               {errors.displayName && (
                 <div className="mt-1 text-xs text-red-600">{errors.displayName}</div>
@@ -276,33 +319,31 @@ export default function AccountPage() {
             <div>
               <div className="text-sm font-semibold text-slate-700 mb-1">メールアドレス</div>
               <input
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-100"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="メールアドレスを入力"
-                disabled={saving || isDemoUser}
+                disabled={saving}
               />
               {errors.email && <div className="mt-1 text-xs text-red-600">{errors.email}</div>}
             </div>
           </div>
 
+          {/* パスワード変更 */}
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-            <div className="font-extrabold text-slate-900">パスワード変更</div>
-            <div className="mt-1 text-sm text-slate-600">
-              変更する場合のみ入力してください。
-            </div>
+            <div className="text-sm font-bold text-slate-900">パスワード変更</div>
+            <div className="mt-1 text-xs text-slate-600">変更する場合のみ入力してください。</div>
 
-            {/* 縦並び */}
             <div className="mt-4 space-y-4">
               <div>
                 <div className="text-sm font-semibold text-slate-700 mb-1">現在のパスワード</div>
                 <input
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-100"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                   type="password"
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
                   placeholder="現在のパスワードを入力"
-                  disabled={saving || isDemoUser}
+                  disabled={saving}
                 />
                 {errors.currentPassword && (
                   <div className="mt-1 text-xs text-red-600">{errors.currentPassword}</div>
@@ -312,12 +353,12 @@ export default function AccountPage() {
               <div>
                 <div className="text-sm font-semibold text-slate-700 mb-1">新しいパスワード</div>
                 <input
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-100"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="新しいパスワード（6文字以上）"
-                  disabled={saving || isDemoUser}
+                  placeholder="新しいパスワードを入力（6文字以上）"
+                  disabled={saving}
                 />
                 {errors.newPassword && (
                   <div className="mt-1 text-xs text-red-600">{errors.newPassword}</div>
@@ -327,12 +368,12 @@ export default function AccountPage() {
               <div>
                 <div className="text-sm font-semibold text-slate-700 mb-1">新しいパスワード確認</div>
                 <input
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-100"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                   type="password"
                   value={newPasswordConfirm}
                   onChange={(e) => setNewPasswordConfirm(e.target.value)}
-                  placeholder="新しいパスワードを再入力"
-                  disabled={saving || isDemoUser}
+                  placeholder="もう一度入力"
+                  disabled={saving}
                 />
                 {errors.newPasswordConfirm && (
                   <div className="mt-1 text-xs text-red-600">{errors.newPasswordConfirm}</div>
@@ -343,32 +384,41 @@ export default function AccountPage() {
 
           <div className="flex justify-end">
             <button
-              type="button"
+              className={[
+                "rounded-xl px-6 py-2 font-bold text-white",
+                saving ? "bg-emerald-300 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700",
+              ].join(" ")}
               onClick={handleSave}
-              disabled={saving || isDemoUser}
-              className="rounded-xl bg-emerald-600 text-white font-extrabold px-6 py-3 text-sm hover:bg-emerald-700 disabled:opacity-60"
+              disabled={saving}
             >
               更新
             </button>
           </div>
 
-          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5">
-            <div className="font-extrabold text-rose-800">※操作注意</div>
-            <div className="mt-2 text-sm text-rose-700">
+          {/* 退会 */}
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
+            <div className="text-sm font-bold text-red-800">※操作注意</div>
+            <p className="mt-1 text-xs text-red-700">
               退会するとログインできなくなります。レビューは残り、表示名は「退会ユーザー」に変更されます。
-            </div>
+            </p>
 
             <div className="mt-4">
               <button
-                type="button"
+                className={[
+                  "rounded-xl px-6 py-2 font-bold text-white",
+                  saving ? "bg-red-300 cursor-not-allowed" : "bg-red-600 hover:bg-red-700",
+                ].join(" ")}
                 onClick={handleDelete}
-                disabled={saving || isDemoUser}
-                className="rounded-xl bg-rose-600 text-white font-extrabold px-6 py-3 text-sm hover:bg-rose-700 disabled:opacity-60"
+                disabled={saving}
               >
                 退会する
               </button>
             </div>
           </div>
+
+          {hasAnyError && (
+            <div className="text-xs text-slate-500 text-center">入力エラーを修正してください。</div>
+          )}
         </div>
       </div>
     </div>
